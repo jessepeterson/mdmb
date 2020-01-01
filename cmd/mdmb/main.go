@@ -6,33 +6,47 @@ import (
 	"os"
 )
 
-func commonUsage() {
-	flag.PrintDefaults()
+func main() {
+	f := flag.NewFlagSet("", flag.ExitOnError)
+	var (
+		dbPath = f.String("db", "mdmb.db", "mdmb database file path")
+	)
+	f.Usage = func() {
+		fmt.Fprintf(f.Output(), "%s [flags] <subcommand> [flags]\n", os.Args[0])
+		fmt.Fprint(f.Output(), "\nFlags:\n")
+		f.PrintDefaults()
+		fmt.Fprint(f.Output(), "\nSubcommands:\n")
+		fmt.Fprintln(f.Output(), "    enroll\tenroll devices into MDM")
+	}
+	f.Parse(os.Args[1:])
+
+	if len(f.Args()) < 1 {
+		fmt.Fprintln(f.Output(), "no subcommand supplied")
+		f.Usage()
+		os.Exit(2)
+	}
+
+	switch f.Args()[0] {
+	case "enroll":
+		enroll(f.Args()[1:], *dbPath, f.Usage)
+	default:
+		fmt.Fprintf(f.Output(), "invalid subcommand: %s\n", f.Args()[0])
+		f.Usage()
+		os.Exit(2)
+	}
 }
 
-func main() {
-	args := os.Args[1:]
-	commonFlags := flag.NewFlagSet("", flag.ExitOnError)
-	commonFlags.Usage = func() {
-		fmt.Fprintf(commonFlags.Output(), "%s [flags] <subcommand> [flags]\n\n", os.Args[0])
-		commonFlags.PrintDefaults()
-		fmt.Fprint(commonFlags.Output(), "\nvalid subcommands:\n\n")
-		fmt.Fprintf(commonFlags.Output(), "\tenroll\n")
+func enroll(args []string, _ string, mainUsage func()) {
+	f := flag.NewFlagSet("", flag.ExitOnError)
+	var (
+		enrollType = f.String("type", "profile", "enrollment type")
+	)
+	f.Usage = func() {
+		mainUsage()
+		fmt.Fprint(f.Output(), "\nenroll subcommand flags:\n")
+		f.PrintDefaults()
 	}
-	commonFlags.Parse(args)
+	f.Parse(args)
 
-	args = args[len(args)-commonFlags.NArg():]
-	if len(args) < 1 {
-		fmt.Fprintln(commonFlags.Output(), "missing subcommand")
-		commonFlags.Usage()
-		os.Exit(1)
-	}
-	switch args[0] {
-	case "enroll":
-		enrollCmd(args[1:])
-	default:
-		fmt.Fprintf(commonFlags.Output(), "invalid subcommand: %s\n", args[0])
-		commonFlags.Usage()
-		os.Exit(1)
-	}
+	fmt.Printf("enrollment type: %s\n", *enrollType)
 }

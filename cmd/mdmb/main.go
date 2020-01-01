@@ -7,12 +7,12 @@ import (
 )
 
 func main() {
-	f := flag.NewFlagSet("", flag.ExitOnError)
+	f := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
 	var (
 		dbPath = f.String("db", "mdmb.db", "mdmb database file path")
 	)
 	f.Usage = func() {
-		fmt.Fprintf(f.Output(), "%s [flags] <subcommand> [flags]\n", os.Args[0])
+		fmt.Fprintf(f.Output(), "%s [flags] <subcommand> [flags]\n", f.Name())
 		fmt.Fprint(f.Output(), "\nFlags:\n")
 		f.PrintDefaults()
 		fmt.Fprint(f.Output(), "\nSubcommands:\n")
@@ -37,16 +37,17 @@ func main() {
 }
 
 func enroll(args []string, _ string, mainUsage func()) {
-	f := flag.NewFlagSet("", flag.ExitOnError)
+	f := flag.NewFlagSet("enroll", flag.ExitOnError)
 	var (
 		enrollType = f.String("type", "profile", "enrollment type")
+		number     = f.Int("n", 1, "number of devices")
 	)
 	f.Usage = func() {
 		mainUsage()
-		fmt.Fprint(f.Output(), "\nenroll subcommand flags:\n")
+		fmt.Fprintf(f.Output(), "\n%s subcommand flags:\n", f.Name())
 		f.PrintDefaults()
 	}
 	f.Parse(args)
 
-	fmt.Printf("enrollment type: %s\n", *enrollType)
+	fmt.Printf("enrollment type: %s\nnumber: %d\n", *enrollType, *number)
 }

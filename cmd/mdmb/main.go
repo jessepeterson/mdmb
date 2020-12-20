@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/x509"
 	"errors"
 	"flag"
 	"fmt"
@@ -108,16 +109,21 @@ func enrollWithFile(path string) error {
 	}
 	scepPld := scepPlds[0]
 
-	scepUrl := scepPld.PayloadContent.URL
-	fmt.Printf("SCEP URL:\t%s\n", scepUrl)
+	scepURL := scepPld.PayloadContent.URL
+	fmt.Printf("SCEP URL:\t%s\n", scepURL)
 
 	logger := log.NewLogfmtLogger(os.Stderr)
 	logger = log.With(logger, "ts", log.DefaultTimestampUTC)
-	cl, err := scepclient.New(scepUrl, logger)
+	cl, err := scepclient.New(scepURL, logger)
 	if err != nil {
 		return err
 	}
 	fmt.Println(cl.Supports("POSTPKIOperation"))
 
 	return nil
+}
+
+// CSRFromSCEPProfilePayload creates a certificate request from a SCEP configuration profile payload
+func CSRFromSCEPProfilePayload(pl *cfgprofiles.SCEPPayload, priv interface{}) (*x509.CertificateRequest, error) {
+	return nil, nil
 }

@@ -194,6 +194,7 @@ func asn1BitLength(bitString []byte) int {
 	return 0
 }
 
+// (largely) borrowed from x509.go
 func NewKeyUsageExtension(keyUsage int) (e pkix.Extension, err error) {
 	e.Id = asn1.ObjectIdentifier{2, 5, 29, 15}
 	e.Critical = true
@@ -216,24 +217,8 @@ func NewKeyUsageExtension(keyUsage int) (e pkix.Extension, err error) {
 func CSRFromSCEPProfilePayload(rand io.Reader, pl *cfgprofiles.SCEPPayload, priv interface{}) ([]byte, error) {
 	plc := pl.PayloadContent
 
-	// key related
-	// if plc.KeyType != "RSA" && plc.KeyType != "" {
-	// 	return nil, errors.New("only RSA key types supported")
-	// }
-	// key size
-
-	// kU := pkix.Extension{}
-	// kU.Id = asn1.ObjectIdentifier{2, 5, 29, 15}
-	// kU.Critical = true
-
 	tmpl := &x509util.CertificateRequest{
 		ChallengePassword: plc.Challenge,
-		// TODO:
-		// TODO:
-		// TODO:
-		// TODO:
-		// TODO:
-		// TODO:
 	}
 	if plc.KeyUsage != 0 {
 		keyUsageExtn, err := NewKeyUsageExtension(plc.KeyUsage)
@@ -243,5 +228,6 @@ func CSRFromSCEPProfilePayload(rand io.Reader, pl *cfgprofiles.SCEPPayload, priv
 		tmpl.ExtraExtensions = append(tmpl.ExtraExtensions, keyUsageExtn)
 	}
 	// TODO: Subject
+	// TODO: SANs
 	return x509util.CreateCertificateRequest(rand, tmpl, priv)
 }

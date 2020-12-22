@@ -2,14 +2,10 @@ package main
 
 import (
 	"crypto/rand"
-	"crypto/rsa"
-	"crypto/x509/pkix"
-	"encoding/asn1"
 	"encoding/pem"
 	"errors"
 	"flag"
 	"fmt"
-	"io"
 	stdlog "log"
 	"os"
 
@@ -17,7 +13,6 @@ import (
 	"github.com/groob/plist"
 	"github.com/jessepeterson/cfgprofiles"
 	scepclient "github.com/micromdm/scep/client"
-	"github.com/micromdm/scep/crypto/x509util"
 )
 
 func main() {
@@ -127,12 +122,12 @@ func enrollWithFile(path string) error {
 	// fmt.Println(cl.Supports("POSTPKIOperation"))
 	fmt.Println(cl)
 
-	devKey, err := KeyFromSCEPProfilePayload(rand.Reader, scepPld)
+	devKey, err := keyFromSCEPProfilePayload(rand.Reader, scepPld)
 	if err != nil {
 		return err
 	}
 
-	csrBytes, err := CSRFromSCEPProfilePayload(rand.Reader, scepPld, devKey)
+	csrBytes, err := csrFromSCEPProfilePayload(rand.Reader, scepPld, devKey)
 	if err != nil {
 		return err
 	}
@@ -153,81 +148,4 @@ func enrollWithFile(path string) error {
 	}
 
 	return nil
-}
-
-// KeyFromSCEPProfilePayload creates a private key from a SCEP configuration profile payload
-func KeyFromSCEPProfilePayload(rand io.Reader, pl *cfgprofiles.SCEPPayload) (interface{}, error) {
-	plc := pl.PayloadContent
-	if plc.KeyType != "RSA" && plc.KeyType != "" {
-		return nil, errors.New("only RSA keys supported")
-	}
-	keySize := 1024
-	if plc.KeySize > 0 {
-		keySize = plc.KeySize
-	}
-	return rsa.GenerateKey(rand, keySize)
-}
-
-// borrowed from x509.go
-func reverseBitsInAByte(in byte) byte {
-	b1 := in>>4 | in<<4
-	b2 := b1>>2&0x33 | b1<<2&0xcc
-	b3 := b2>>1&0x55 | b2<<1&0xaa
-	return b3
-}
-
-// borrowed from x509.go
-func asn1BitLength(bitString []byte) int {
-	bitLen := len(bitString) * 8
-
-	for i := range bitString {
-		b := bitString[len(bitString)-i-1]
-
-		for bit := uint(0); bit < 8; bit++ {
-			if (b>>bit)&1 == 1 {
-				return bitLen
-			}
-			bitLen--
-		}
-	}
-
-	return 0
-}
-
-// (largely) borrowed from x509.go
-func NewKeyUsageExtension(keyUsage int) (e pkix.Extension, err error) {
-	e.Id = asn1.ObjectIdentifier{2, 5, 29, 15}
-	e.Critical = true
-
-	var a [2]byte
-	a[0] = reverseBitsInAByte(byte(keyUsage))
-	a[1] = reverseBitsInAByte(byte(keyUsage >> 8))
-
-	l := 1
-	if a[1] != 0 {
-		l = 2
-	}
-
-	bitString := a[:l]
-	e.Value, err = asn1.Marshal(asn1.BitString{Bytes: bitString, BitLength: asn1BitLength(bitString)})
-	return e, err
-}
-
-// CSRFromSCEPProfilePayload creates a certificate request from a SCEP configuration profile payload
-func CSRFromSCEPProfilePayload(rand io.Reader, pl *cfgprofiles.SCEPPayload, priv interface{}) ([]byte, error) {
-	plc := pl.PayloadContent
-
-	tmpl := &x509util.CertificateRequest{
-		ChallengePassword: plc.Challenge,
-	}
-	if plc.KeyUsage != 0 {
-		keyUsageExtn, err := NewKeyUsageExtension(plc.KeyUsage)
-		if err != nil {
-			return nil, err
-		}
-		tmpl.ExtraExtensions = append(tmpl.ExtraExtensions, keyUsageExtn)
-	}
-	// TODO: Subject
-	// TODO: SANs
-	return x509util.CreateCertificateRequest(rand, tmpl, priv)
 }

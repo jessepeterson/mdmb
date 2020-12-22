@@ -11,6 +11,8 @@ import (
 	"github.com/micromdm/scep/crypto/x509util"
 )
 
+const defaultRSAKeySize = 1024
+
 // borrowed from x509.go
 func reverseBitsInAByte(in byte) byte {
 	b1 := in>>4 | in<<4
@@ -56,19 +58,19 @@ func newKeyUsageExtension(keyUsage int) (e pkix.Extension, err error) {
 	return e, err
 }
 
-func keyFromSCEPProfilePayload(rand io.Reader, pl *cfgprofiles.SCEPPayload) (interface{}, error) {
+func keyFromSCEPProfilePayload(rand io.Reader, pl *cfgprofiles.SCEPPayload) (*rsa.PrivateKey, error) {
 	plc := pl.PayloadContent
-	if plc.KeyType != "RSA" && plc.KeyType != "" {
+	if plc.KeyType != "" && plc.KeyType != "RSA" {
 		return nil, errors.New("only RSA keys supported")
 	}
-	keySize := 1024
+	keySize := defaultRSAKeySize
 	if plc.KeySize > 0 {
 		keySize = plc.KeySize
 	}
 	return rsa.GenerateKey(rand, keySize)
 }
 
-func csrFromSCEPProfilePayload(rand io.Reader, pl *cfgprofiles.SCEPPayload, priv interface{}) ([]byte, error) {
+func csrFromSCEPProfilePayload(rand io.Reader, pl *cfgprofiles.SCEPPayload, priv *rsa.PrivateKey) ([]byte, error) {
 	plc := pl.PayloadContent
 
 	tmpl := &x509util.CertificateRequest{

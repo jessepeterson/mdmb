@@ -132,20 +132,27 @@ func enrollWithFile(path string) error {
 		return err
 	}
 
-	pemBlock := &pem.Block{
-		Type:  "CERTIFICATE REQUEST",
-		Bytes: csrBytes,
-	}
-
-	f, err = os.Create("/tmp/csr.pem")
-	if err != nil {
-		return nil
-	}
-	defer f.Close()
-	err = pem.Encode(f, pemBlock)
+	err = writeCSR(csrBytes, "/tmp/csr.pem")
 	if err != nil {
 		return err
 	}
 
+	return nil
+}
+
+func writeCSR(csr []byte, filename string) error {
+	f, err := os.Create(filename)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	pemBlock := &pem.Block{
+		Type:  "CERTIFICATE REQUEST",
+		Bytes: csr,
+	}
+	err = pem.Encode(f, pemBlock)
+	if err != nil {
+		return err
+	}
 	return nil
 }

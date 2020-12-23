@@ -136,6 +136,7 @@ func enrollWithFile(path string) error {
 	if err != nil {
 		return err
 	}
+	fmt.Println("saved CSR to /tmp/csr.pem")
 
 	return nil
 }

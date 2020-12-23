@@ -77,6 +77,7 @@ func csrFromSCEPProfilePayload(rand io.Reader, pl *cfgprofiles.SCEPPayload, priv
 		ChallengePassword: plc.Challenge,
 	}
 	if plc.KeyUsage != 0 {
+		// this is a bitfield that appears to match Go/X509 definition
 		keyUsageExtn, err := newKeyUsageExtension(plc.KeyUsage)
 		if err != nil {
 			return nil, err

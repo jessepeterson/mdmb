@@ -5,6 +5,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/asn1"
 	"errors"
+	"fmt"
 	"io"
 
 	"github.com/jessepeterson/cfgprofiles"
@@ -84,7 +85,33 @@ func csrFromSCEPProfilePayload(rand io.Reader, pl *cfgprofiles.SCEPPayload, priv
 		}
 		tmpl.ExtraExtensions = append(tmpl.ExtraExtensions, keyUsageExtn)
 	}
-	// TODO: Subject
+	for _, onvg := range plc.Subject {
+		for _, onv := range onvg {
+			if len(onv) < 2 {
+				return nil, fmt.Errorf("invalid OID in SCEP payload: %v", onv)
+			}
+			// TODO: replace device %variable% names
+			values := onv[1:]
+			switch onv[0] {
+			case "C":
+				tmpl.Subject.Country = values
+			case "L":
+				tmpl.Subject.Locality = values
+			case "ST":
+				// TODO: Are these interchangeable?
+				tmpl.Subject.Province = values
+			case "O":
+				tmpl.Subject.Organization = values
+			case "OU":
+				tmpl.Subject.OrganizationalUnit = values
+			case "CN":
+				tmpl.Subject.CommonName = onv[1]
+			default:
+				// TODO: not yet supported
+				return nil, fmt.Errorf("unhandled OID in SCEP payload: %v", onv)
+			}
+		}
+	}
 	// TODO: SANs
 	return x509util.CreateCertificateRequest(rand, tmpl, priv)
 }

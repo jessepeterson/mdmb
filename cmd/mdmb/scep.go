@@ -108,7 +108,6 @@ func csrFromSCEPProfilePayload(pl *cfgprofiles.SCEPPayload, device *device.Devic
 			if len(onv) < 2 {
 				return nil, fmt.Errorf("invalid OID in SCEP payload: %v", onv)
 			}
-			// TODO: replace device %variable% names
 			values := replaceSCEPVars(device, onv[1:])
 			switch onv[0] {
 			case "C":

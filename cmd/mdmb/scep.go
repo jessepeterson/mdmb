@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/jessepeterson/cfgprofiles"
 	"github.com/micromdm/scep/crypto/x509util"
@@ -71,6 +72,22 @@ func keyFromSCEPProfilePayload(rand io.Reader, pl *cfgprofiles.SCEPPayload) (*rs
 	return rsa.GenerateKey(rand, keySize)
 }
 
+func replaceSCEPVars(device interface{}, istrs []string) (ostrs []string) {
+	// % /usr/libexec/mdmclient dumpSCEPVars
+	r := strings.NewReplacer([]string{
+		"%ComputerName%", "TODO_ComputerName",
+		"%HardwareUUID%", "TODO_HardwareUUID",
+		// "%HostName%", "TODO_HostName",
+		// "%LocalHostName%", "TODO_LocalHostName",
+		// "%MACAddress%", "TODO_MACAddress",
+		"%SerialNumber%", "TODO_SerialNumber",
+	}...)
+	for _, istr := range istrs {
+		ostrs = append(ostrs, r.Replace(istr))
+	}
+	return
+}
+
 func csrFromSCEPProfilePayload(rand io.Reader, pl *cfgprofiles.SCEPPayload, priv *rsa.PrivateKey) ([]byte, error) {
 	plc := pl.PayloadContent
 
@@ -91,7 +108,7 @@ func csrFromSCEPProfilePayload(rand io.Reader, pl *cfgprofiles.SCEPPayload, priv
 				return nil, fmt.Errorf("invalid OID in SCEP payload: %v", onv)
 			}
 			// TODO: replace device %variable% names
-			values := onv[1:]
+			values := replaceSCEPVars(nil, onv[1:])
 			switch onv[0] {
 			case "C":
 				tmpl.Subject.Country = values
@@ -105,9 +122,9 @@ func csrFromSCEPProfilePayload(rand io.Reader, pl *cfgprofiles.SCEPPayload, priv
 			case "OU":
 				tmpl.Subject.OrganizationalUnit = values
 			case "CN":
-				tmpl.Subject.CommonName = onv[1]
+				tmpl.Subject.CommonName = values[0]
 			default:
-				// TODO: not yet supported
+				// TODO: arbitrary OIDs not yet supported
 				return nil, fmt.Errorf("unhandled OID in SCEP payload: %v", onv)
 			}
 		}

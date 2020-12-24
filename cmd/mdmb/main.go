@@ -12,6 +12,7 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/groob/plist"
 	"github.com/jessepeterson/cfgprofiles"
+	"github.com/jessepeterson/mdmb/internal/device"
 	scepclient "github.com/micromdm/scep/client"
 )
 
@@ -122,12 +123,18 @@ func enrollWithFile(path string) error {
 	// fmt.Println(cl.Supports("POSTPKIOperation"))
 	fmt.Println(cl)
 
-	devKey, err := keyFromSCEPProfilePayload(rand.Reader, scepPld)
+	dev := &device.Device{
+		UDID:         "475F0A29-6FCE-419E-A30F-9FF616FD2B87",
+		Serial:       "P3IJDS49Z90A",
+		ComputerName: "Malik's computer",
+	}
+
+	dev.DeviceIdentityKey, err = keyFromSCEPProfilePayload(scepPld, rand.Reader)
 	if err != nil {
 		return err
 	}
 
-	csrBytes, err := csrFromSCEPProfilePayload(rand.Reader, scepPld, devKey)
+	csrBytes, err := csrFromSCEPProfilePayload(scepPld, dev, rand.Reader)
 	if err != nil {
 		return err
 	}

@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/jessepeterson/cfgprofiles"
+	"github.com/jessepeterson/mdmb/internal/device"
 	"github.com/micromdm/scep/crypto/x509util"
 )
 
@@ -60,7 +61,7 @@ func newKeyUsageExtension(keyUsage int) (e pkix.Extension, err error) {
 	return e, err
 }
 
-func keyFromSCEPProfilePayload(rand io.Reader, pl *cfgprofiles.SCEPPayload) (*rsa.PrivateKey, error) {
+func keyFromSCEPProfilePayload(pl *cfgprofiles.SCEPPayload, rand io.Reader) (*rsa.PrivateKey, error) {
 	plc := pl.PayloadContent
 	if plc.KeyType != "" && plc.KeyType != "RSA" {
 		return nil, errors.New("only RSA keys supported")
@@ -72,15 +73,15 @@ func keyFromSCEPProfilePayload(rand io.Reader, pl *cfgprofiles.SCEPPayload) (*rs
 	return rsa.GenerateKey(rand, keySize)
 }
 
-func replaceSCEPVars(device interface{}, istrs []string) (ostrs []string) {
+func replaceSCEPVars(device *device.Device, istrs []string) (ostrs []string) {
 	// % /usr/libexec/mdmclient dumpSCEPVars
 	r := strings.NewReplacer([]string{
-		"%ComputerName%", "TODO_ComputerName",
-		"%HardwareUUID%", "TODO_HardwareUUID",
+		"%ComputerName%", device.ComputerName,
+		"%HardwareUUID%", device.UDID,
+		"%SerialNumber%", device.Serial,
 		// "%HostName%", "TODO_HostName",
 		// "%LocalHostName%", "TODO_LocalHostName",
 		// "%MACAddress%", "TODO_MACAddress",
-		"%SerialNumber%", "TODO_SerialNumber",
 	}...)
 	for _, istr := range istrs {
 		ostrs = append(ostrs, r.Replace(istr))
@@ -88,7 +89,7 @@ func replaceSCEPVars(device interface{}, istrs []string) (ostrs []string) {
 	return
 }
 
-func csrFromSCEPProfilePayload(rand io.Reader, pl *cfgprofiles.SCEPPayload, priv *rsa.PrivateKey) ([]byte, error) {
+func csrFromSCEPProfilePayload(pl *cfgprofiles.SCEPPayload, device *device.Device, rand io.Reader) ([]byte, error) {
 	plc := pl.PayloadContent
 
 	tmpl := &x509util.CertificateRequest{
@@ -108,7 +109,7 @@ func csrFromSCEPProfilePayload(rand io.Reader, pl *cfgprofiles.SCEPPayload, priv
 				return nil, fmt.Errorf("invalid OID in SCEP payload: %v", onv)
 			}
 			// TODO: replace device %variable% names
-			values := replaceSCEPVars(nil, onv[1:])
+			values := replaceSCEPVars(device, onv[1:])
 			switch onv[0] {
 			case "C":
 				tmpl.Subject.Country = values
@@ -130,5 +131,5 @@ func csrFromSCEPProfilePayload(rand io.Reader, pl *cfgprofiles.SCEPPayload, priv
 		}
 	}
 	// TODO: SANs
-	return x509util.CreateCertificateRequest(rand, tmpl, priv)
+	return x509util.CreateCertificateRequest(rand, tmpl, device.DeviceIdentityKey)
 }

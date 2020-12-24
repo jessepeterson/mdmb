@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/pem"
 	"errors"
@@ -144,6 +145,13 @@ func enrollWithFile(path string) error {
 		return err
 	}
 	fmt.Println("saved CSR to /tmp/csr.pem")
+
+	ctx := context.Background()
+	_, certNum, err := cl.GetCACert(ctx)
+
+	fmt.Println(certNum)
+
+	// tmpl := &scep.PKIMessage{}
 
 	return nil
 }

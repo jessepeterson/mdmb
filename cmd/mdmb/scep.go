@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
@@ -10,12 +11,16 @@ import (
 	"fmt"
 	"io"
 	"math/big"
+	"os"
 	"strings"
 	"time"
 
+	"github.com/go-kit/kit/log"
 	"github.com/jessepeterson/cfgprofiles"
 	"github.com/jessepeterson/mdmb/internal/device"
+	scepclient "github.com/micromdm/scep/client"
 	"github.com/micromdm/scep/crypto/x509util"
+	"github.com/micromdm/scep/scep"
 )
 
 const defaultRSAKeySize = 1024
@@ -134,7 +139,7 @@ func csrFromSCEPProfilePayload(pl *cfgprofiles.SCEPPayload, device *device.Devic
 		}
 	}
 	// TODO: SANs
-	return x509util.CreateCertificateRequest(rand, tmpl, device.DeviceIdentityKey)
+	return x509util.CreateCertificateRequest(rand, tmpl, device.IdentityPrivateKey)
 }
 
 func selfSign() (*rsa.PrivateKey, *x509.Certificate, error) {
@@ -168,4 +173,85 @@ func selfSign() (*rsa.PrivateKey, *x509.Certificate, error) {
 	}
 	cert, err := x509.ParseCertificate(derBytes)
 	return priv, cert, err
+}
+
+func scepNewPKCSReq(csrBytes []byte, url, challenge string) (*x509.Certificate, error) {
+	logger := log.NewLogfmtLogger(os.Stderr)
+	logger = log.With(logger, "ts", log.DefaultTimestampUTC)
+	cl, err := scepclient.New(url, logger)
+	if err != nil {
+		return nil, err
+	}
+	ctx := context.Background()
+	resp, certNum, err := cl.GetCACert(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var certs []*x509.Certificate
+	{
+		if certNum > 1 {
+			certs, err = scep.CACerts(resp)
+			if err != nil {
+				return nil, err
+			}
+			if len(certs) < 1 {
+				return nil, fmt.Errorf("no certificates returned")
+			}
+		} else {
+			certs, err = x509.ParseCertificates(resp)
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	scepTmpKey, scepTmpCert, err := selfSign()
+	if err != nil {
+		return nil, err
+	}
+
+	tmpl := &scep.PKIMessage{
+		MessageType: scep.PKCSReq,
+		Recipients:  certs,
+		SignerKey:   scepTmpKey,
+		SignerCert:  scepTmpCert,
+	}
+
+	if challenge != "" {
+		tmpl.CSRReqMessage = &scep.CSRReqMessage{
+			ChallengePassword: challenge,
+		}
+	}
+
+	csr, err := x509.ParseCertificateRequest(csrBytes)
+	if err != nil {
+		return nil, err
+	}
+
+	msg, err := scep.NewCSRRequest(csr, tmpl, scep.WithLogger(logger))
+	if err != nil {
+		return nil, fmt.Errorf("creating csr pkiMessage: %w", err)
+	}
+
+	respBytes, err := cl.PKIOperation(ctx, msg.Raw)
+	if err != nil {
+		return nil, fmt.Errorf("PKIOperation for PKCSReq: %w", err)
+	}
+
+	respMsg, err := scep.ParsePKIMessage(respBytes, scep.WithLogger(logger))
+	if err != nil {
+		return nil, fmt.Errorf("PKCSReq parsing pkiMessage response %w", err)
+	}
+
+	if respMsg.PKIStatus != scep.SUCCESS {
+		return nil, fmt.Errorf("PKCSReq request failed, failInfo: %s", respMsg.FailInfo)
+	}
+
+	logger.Log("pkiStatus", "SUCCESS", "msg", "server returned a certificate.")
+
+	if err := respMsg.DecryptPKIEnvelope(scepTmpCert, scepTmpKey); err != nil {
+		return nil, fmt.Errorf("PKCSReq decrypt pkiEnvelope: %s: %w", respMsg.PKIStatus, err)
+	}
+
+	return respMsg.CertRepMessage.Certificate, nil
 }

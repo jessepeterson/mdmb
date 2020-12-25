@@ -1,6 +1,9 @@
 package device
 
-import "crypto/rsa"
+import (
+	"crypto/rsa"
+	"crypto/x509"
+)
 
 // Device represents a pseudo Apple device for MDM interactions
 type Device struct {
@@ -8,5 +11,6 @@ type Device struct {
 	Serial       string
 	ComputerName string
 
-	DeviceIdentityKey *rsa.PrivateKey
+	IdentityCertificate *x509.Certificate
+	IdentityPrivateKey  *rsa.PrivateKey
 }

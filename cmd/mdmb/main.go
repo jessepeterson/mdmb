@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"crypto/rand"
 	"crypto/x509"
 	"encoding/pem"
@@ -11,12 +10,9 @@ import (
 	stdlog "log"
 	"os"
 
-	"github.com/go-kit/kit/log"
 	"github.com/groob/plist"
 	"github.com/jessepeterson/cfgprofiles"
 	"github.com/jessepeterson/mdmb/internal/device"
-	scepclient "github.com/micromdm/scep/client"
-	"github.com/micromdm/scep/scep"
 )
 
 func main() {
@@ -117,22 +113,13 @@ func enrollWithFile(path string) error {
 	scepURL := scepPld.PayloadContent.URL
 	fmt.Printf("SCEP URL:\t%s\n", scepURL)
 
-	logger := log.NewLogfmtLogger(os.Stderr)
-	logger = log.With(logger, "ts", log.DefaultTimestampUTC)
-	cl, err := scepclient.New(scepURL, logger)
-	if err != nil {
-		return err
-	}
-	// fmt.Println(cl.Supports("POSTPKIOperation"))
-	fmt.Println(cl)
-
 	dev := &device.Device{
 		UDID:         "475F0A29-6FCE-419E-A30F-9FF616FD2B87",
 		Serial:       "P3IJDS49Z90A",
 		ComputerName: "Malik's computer",
 	}
 
-	dev.DeviceIdentityKey, err = keyFromSCEPProfilePayload(scepPld, rand.Reader)
+	dev.IdentityPrivateKey, err = keyFromSCEPProfilePayload(scepPld, rand.Reader)
 	if err != nil {
 		return err
 	}
@@ -148,82 +135,14 @@ func enrollWithFile(path string) error {
 	}
 	fmt.Println("saved CSR to /tmp/csr.pem")
 
-	ctx := context.Background()
-	resp, certNum, err := cl.GetCACert(ctx)
-	if err != nil {
-		return err
-	}
-	var certs []*x509.Certificate
-	{
-		if certNum > 1 {
-			certs, err = scep.CACerts(resp)
-			if err != nil {
-				return err
-			}
-			if len(certs) < 1 {
-				return fmt.Errorf("no certificates returned")
-			}
-		} else {
-			certs, err = x509.ParseCertificates(resp)
-			if err != nil {
-				return err
-			}
-		}
-	}
-	fmt.Println(certNum)
-
-	scepTmpKey, scepTmpCert, err := selfSign()
+	dev.IdentityCertificate, err = scepNewPKCSReq(csrBytes, scepURL, scepPld.PayloadContent.Challenge)
 	if err != nil {
 		return err
 	}
 
-	tmpl := &scep.PKIMessage{
-		MessageType: scep.PKCSReq,
-		Recipients:  certs,
-		SignerKey:   scepTmpKey,
-		SignerCert:  scepTmpCert,
-	}
-
-	if scepPld.PayloadContent.Challenge != "" {
-		tmpl.CSRReqMessage = &scep.CSRReqMessage{
-			ChallengePassword: scepPld.PayloadContent.Challenge,
-		}
-	}
-
-	csr, err := x509.ParseCertificateRequest(csrBytes)
-	if err != nil {
+	if err := writeCert(dev.IdentityCertificate, "/tmp/cert.pem"); err != nil {
 		return err
 	}
-
-	msg, err := scep.NewCSRRequest(csr, tmpl, scep.WithLogger(logger))
-	if err != nil {
-		return fmt.Errorf("creating csr pkiMessage: %w", err)
-	}
-
-	respBytes, err := cl.PKIOperation(ctx, msg.Raw)
-	if err != nil {
-		return fmt.Errorf("PKIOperation for PKCSReq: %w", err)
-	}
-
-	respMsg, err := scep.ParsePKIMessage(respBytes, scep.WithLogger(logger))
-	if err != nil {
-		return fmt.Errorf("PKCSReq parsing pkiMessage response %w", err)
-	}
-
-	if respMsg.PKIStatus != scep.SUCCESS {
-		return fmt.Errorf("PKCSReq request failed, failInfo: %s", respMsg.FailInfo)
-	}
-
-	logger.Log("pkiStatus", "SUCCESS", "msg", "server returned a certificate.")
-
-	if err := respMsg.DecryptPKIEnvelope(scepTmpCert, scepTmpKey); err != nil {
-		return fmt.Errorf("PKCSReq decrypt pkiEnvelope: %s: %w", respMsg.PKIStatus, err)
-	}
-
-	if err := writeCert(respMsg.CertRepMessage.Certificate, "/tmp/cert.pem"); err != nil {
-		return err
-	}
-
 	fmt.Println("wrote cert to /tmp/cert.pem")
 
 	return nil

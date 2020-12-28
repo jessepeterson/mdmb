@@ -167,8 +167,87 @@ func enrollWithFile(path string) error {
 		return err
 	}
 
+	fmt.Println("Connecting...")
+	err = Connect(dev, mdmPld.ServerURL)
+	if err != nil {
+		return err
+	}
+
+	// fmt.Println("waiting 10s")
+	// time.Sleep(10 * time.Second)
+
+	// fmt.Println("Connecting...")
+	// err = Connect(dev, mdmPld.ServerURL)
+	// if err != nil {
+	// 	return err
+	// }
+
 	return nil
 }
+
+func Connect(device *device.Device, url string) error {
+	i := &ConnectRequest{
+		UDID:   device.UDID,
+		Status: "Idle",
+	}
+
+	plistBytes, err := plist.Marshal(i)
+	if err != nil {
+		return err
+	}
+
+	mdmSig, err := mdmP7Sign(plistBytes, device.IdentityCertificate, device.IdentityPrivateKey)
+	if err != nil {
+		return err
+	}
+
+	client := &http.Client{}
+	req, err := http.NewRequest("PUT", url, bytes.NewReader(plistBytes))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Mdm-Signature", mdmSig)
+
+	res, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer res.Body.Close()
+
+	xat, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		return err
+	}
+	fmt.Println("===> Connect")
+	fmt.Println(res.Header)
+	fmt.Println(string(xat))
+	fmt.Println("===> Connect")
+
+	if res.StatusCode != 200 {
+		return fmt.Errorf("Checkin Request failed with HTTP status: %d", res.StatusCode)
+	}
+
+	return nil
+}
+
+type ErrorChain struct {
+	ErrorCode            int
+	ErrorDomain          string
+	LocalizedDescription string
+	USEnglishDescription string
+}
+
+type ConnectRequest struct {
+	UDID        string
+	CommandUUID string `plist:",omitempty"`
+	Status      string
+	ErrorChain  []ErrorChain `plist:",omitempty"`
+}
+
+// type ConnectResponse struct {
+// 	Command     interface{}
+// 	CommandUUID string
+// }
 
 func Authenticate(device *device.Device, topic, url string) error {
 	ar := &AuthenticationRequest{

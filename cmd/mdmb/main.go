@@ -155,7 +155,14 @@ func enrollWithFile(path string) error {
 		return errors.New("non-SignMessage (mTLS) enrollment not supported")
 	}
 
+	fmt.Println("sending Authenticate")
 	err = Authenticate(dev, mdmPld.Topic, mdmPld.CheckInURL)
+	if err != nil {
+		return err
+	}
+
+	fmt.Println("sending TokenUpdate")
+	err = TokenUpdate(dev, mdmPld.Topic, mdmPld.CheckInURL)
 	if err != nil {
 		return err
 	}
@@ -174,36 +181,10 @@ func Authenticate(device *device.Device, topic, url string) error {
 		SerialNumber: device.Serial,
 	}
 
-	arBytes, err := plist.Marshal(ar)
+	err := CheckinRequest(ar, device, url)
 	if err != nil {
 		return err
 	}
-
-	mdmSig, err := mdmP7Sign(arBytes, device.IdentityCertificate, device.IdentityPrivateKey)
-	if err != nil {
-		return err
-	}
-
-	client := &http.Client{}
-	req, err := http.NewRequest("PUT", url, bytes.NewReader(arBytes))
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Mdm-Signature", mdmSig)
-
-	fmt.Println("sending Authenticate")
-	res, err := client.Do(req)
-	if err != nil {
-		return err
-	}
-
-	_, err = ioutil.ReadAll(res.Body)
-	if err != nil {
-		return err
-	}
-	res.Body.Close()
-
-	fmt.Println(res.StatusCode)
 
 	return nil
 }
@@ -253,6 +234,59 @@ type TokenUpdateRequest struct {
 	UserShortName         string `plist:",omitempty"`
 	UserID                string `plist:",omitempty"`
 	UserLongName          string `plist:",omitempty"`
+}
+
+func CheckinRequest(i interface{}, device *device.Device, url string) error {
+	plistBytes, err := plist.Marshal(i)
+	if err != nil {
+		return err
+	}
+
+	mdmSig, err := mdmP7Sign(plistBytes, device.IdentityCertificate, device.IdentityPrivateKey)
+	if err != nil {
+		return err
+	}
+
+	client := &http.Client{}
+	req, err := http.NewRequest("PUT", url, bytes.NewReader(plistBytes))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Mdm-Signature", mdmSig)
+
+	res, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer res.Body.Close()
+
+	_, err = ioutil.ReadAll(res.Body)
+	if err != nil {
+		return err
+	}
+
+	if res.StatusCode != 200 {
+		return fmt.Errorf("Checkin Request failed with HTTP status: %d", res.StatusCode)
+	}
+
+	return nil
+}
+
+func TokenUpdate(device *device.Device, topic, url string) error {
+	tu := &TokenUpdateRequest{
+		MessageType: "TokenUpdate",
+		PushMagic:   "PushMagic",
+		Token:       []byte("token"),
+		Topic:       topic,
+		UDID:        device.UDID,
+	}
+
+	err := CheckinRequest(tu, device, url)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func writeCSR(csr []byte, filename string) error {

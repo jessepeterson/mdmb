@@ -98,5 +98,10 @@ func enrollWithFile(path string) error {
 		return err
 	}
 
+	err = client.Connect()
+	if err != nil {
+		return err
+	}
+
 	return nil
 }

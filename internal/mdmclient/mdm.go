@@ -140,47 +140,47 @@ func (c *MDMClient) tokenUpdate() error {
 	return c.checkinRequest(tu)
 }
 
-// func Connect(device *device.Device, url string) error {
-// 	i := &ConnectRequest{
-// 		UDID:   device.UDID,
-// 		Status: "Idle",
-// 	}
+func (c *MDMClient) Connect() error {
+	i := &ConnectRequest{
+		UDID:   c.Device.UDID,
+		Status: "Idle",
+	}
 
-// 	plistBytes, err := plist.Marshal(i)
-// 	if err != nil {
-// 		return err
-// 	}
+	plistBytes, err := plist.Marshal(i)
+	if err != nil {
+		return err
+	}
 
-// 	mdmSig, err := mdmP7Sign(plistBytes, device.IdentityCertificate, device.IdentityPrivateKey)
-// 	if err != nil {
-// 		return err
-// 	}
+	mdmSig, err := c.mdmP7Sign(plistBytes)
+	if err != nil {
+		return err
+	}
 
-// 	client := &http.Client{}
-// 	req, err := http.NewRequest("PUT", url, bytes.NewReader(plistBytes))
-// 	if err != nil {
-// 		return err
-// 	}
-// 	req.Header.Set("Mdm-Signature", mdmSig)
+	client := &http.Client{}
+	req, err := http.NewRequest("PUT", c.MDMPayload.ServerURL, bytes.NewReader(plistBytes))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Mdm-Signature", mdmSig)
 
-// 	res, err := client.Do(req)
-// 	if err != nil {
-// 		return err
-// 	}
-// 	defer res.Body.Close()
+	res, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer res.Body.Close()
 
-// 	xat, err := ioutil.ReadAll(res.Body)
-// 	if err != nil {
-// 		return err
-// 	}
-// 	fmt.Println("===> Connect")
-// 	fmt.Println(res.Header)
-// 	fmt.Println(string(xat))
-// 	fmt.Println("===> Connect")
+	xat, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		return err
+	}
+	fmt.Println("===> Connect")
+	fmt.Println(res.Header)
+	fmt.Println(string(xat))
+	fmt.Println("===> Connect")
 
-// 	if res.StatusCode != 200 {
-// 		return fmt.Errorf("Checkin Request failed with HTTP status: %d", res.StatusCode)
-// 	}
+	if res.StatusCode != 200 {
+		return fmt.Errorf("Checkin Request failed with HTTP status: %d", res.StatusCode)
+	}
 
-// 	return nil
-// }
+	return nil
+}

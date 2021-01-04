@@ -1,24 +1,15 @@
 package main
 
 import (
-	"bytes"
 	"crypto/rand"
-	"crypto/rsa"
-	"crypto/x509"
-	"encoding/base64"
-	"encoding/pem"
-	"errors"
 	"flag"
 	"fmt"
 	"io/ioutil"
 	stdlog "log"
-	"net/http"
 	"os"
 
-	"github.com/groob/plist"
-	"github.com/jessepeterson/cfgprofiles"
 	"github.com/jessepeterson/mdmb/internal/device"
-	"go.mozilla.org/pkcs7"
+	"github.com/jessepeterson/mdmb/internal/mdmclient"
 )
 
 func main() {
@@ -89,35 +80,10 @@ func enroll(args []string, usage func()) {
 
 func enrollWithFile(path string) error {
 
-	f, err := os.Open(path)
+	ep, err := ioutil.ReadFile(path)
 	if err != nil {
 		return err
 	}
-	defer f.Close()
-
-	profile := &cfgprofiles.Profile{}
-
-	dec := plist.NewDecoder(f)
-	if err := dec.Decode(profile); err != nil {
-		return err
-	}
-
-	mdmPlds := profile.MDMPayloads()
-	if len(mdmPlds) != 1 {
-		return errors.New("invalid number of MDM payloads")
-	}
-	mdmPld := mdmPlds[0]
-
-	fmt.Printf("CheckIn:\t%s\nConnect:\t%s\n", mdmPld.CheckInURL, mdmPld.ServerURL)
-
-	scepPlds := profile.SCEPPayloads()
-	if len(mdmPlds) != 1 {
-		return errors.New("invalid number of MDM payloads")
-	}
-	scepPld := scepPlds[0]
-
-	scepURL := scepPld.PayloadContent.URL
-	fmt.Printf("SCEP URL:\t%s\n", scepURL)
 
 	dev := &device.Device{
 		UDID:         "475F0A29-6FCE-419E-A30F-9FF616FD2B87",
@@ -125,279 +91,12 @@ func enrollWithFile(path string) error {
 		ComputerName: "Malik's computer",
 	}
 
-	dev.IdentityPrivateKey, err = keyFromSCEPProfilePayload(scepPld, rand.Reader)
+	client := mdmclient.NewMDMClient(dev)
+
+	err = client.Enroll(ep, rand.Reader)
 	if err != nil {
 		return err
 	}
 
-	csrBytes, err := csrFromSCEPProfilePayload(scepPld, dev, rand.Reader)
-	if err != nil {
-		return err
-	}
-
-	err = writeCSR(csrBytes, "/tmp/csr.pem")
-	if err != nil {
-		return err
-	}
-	fmt.Println("wrote CSR to /tmp/csr.pem")
-
-	dev.IdentityCertificate, err = scepNewPKCSReq(csrBytes, scepURL, scepPld.PayloadContent.Challenge)
-	if err != nil {
-		return err
-	}
-
-	if err := writeCert(dev.IdentityCertificate, "/tmp/cert.pem"); err != nil {
-		return err
-	}
-	fmt.Println("wrote cert to /tmp/cert.pem")
-
-	if !mdmPld.SignMessage {
-		return errors.New("non-SignMessage (mTLS) enrollment not supported")
-	}
-
-	fmt.Println("sending Authenticate")
-	err = Authenticate(dev, mdmPld.Topic, mdmPld.CheckInURL)
-	if err != nil {
-		return err
-	}
-
-	fmt.Println("sending TokenUpdate")
-	err = TokenUpdate(dev, mdmPld.Topic, mdmPld.CheckInURL)
-	if err != nil {
-		return err
-	}
-
-	fmt.Println("Connecting...")
-	err = Connect(dev, mdmPld.ServerURL)
-	if err != nil {
-		return err
-	}
-
-	// fmt.Println("waiting 10s")
-	// time.Sleep(10 * time.Second)
-
-	// fmt.Println("Connecting...")
-	// err = Connect(dev, mdmPld.ServerURL)
-	// if err != nil {
-	// 	return err
-	// }
-
-	return nil
-}
-
-func Connect(device *device.Device, url string) error {
-	i := &ConnectRequest{
-		UDID:   device.UDID,
-		Status: "Idle",
-	}
-
-	plistBytes, err := plist.Marshal(i)
-	if err != nil {
-		return err
-	}
-
-	mdmSig, err := mdmP7Sign(plistBytes, device.IdentityCertificate, device.IdentityPrivateKey)
-	if err != nil {
-		return err
-	}
-
-	client := &http.Client{}
-	req, err := http.NewRequest("PUT", url, bytes.NewReader(plistBytes))
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Mdm-Signature", mdmSig)
-
-	res, err := client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer res.Body.Close()
-
-	xat, err := ioutil.ReadAll(res.Body)
-	if err != nil {
-		return err
-	}
-	fmt.Println("===> Connect")
-	fmt.Println(res.Header)
-	fmt.Println(string(xat))
-	fmt.Println("===> Connect")
-
-	if res.StatusCode != 200 {
-		return fmt.Errorf("Checkin Request failed with HTTP status: %d", res.StatusCode)
-	}
-
-	return nil
-}
-
-type ErrorChain struct {
-	ErrorCode            int
-	ErrorDomain          string
-	LocalizedDescription string
-	USEnglishDescription string
-}
-
-type ConnectRequest struct {
-	UDID        string
-	CommandUUID string `plist:",omitempty"`
-	Status      string
-	ErrorChain  []ErrorChain `plist:",omitempty"`
-}
-
-// type ConnectResponse struct {
-// 	Command     interface{}
-// 	CommandUUID string
-// }
-
-func Authenticate(device *device.Device, topic, url string) error {
-	ar := &AuthenticationRequest{
-		DeviceName:  device.ComputerName,
-		MessageType: "Authenticate",
-		Topic:       topic,
-		UDID:        device.UDID,
-
-		// non-required
-		SerialNumber: device.Serial,
-	}
-
-	err := CheckinRequest(ar, device, url)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-// AuthenticationRequest ...
-type AuthenticationRequest struct {
-	BuildVersion string `plist:",omitempty"`
-	DeviceName   string
-	IMEI         string `plist:",omitempty"`
-	MEID         string `plist:",omitempty"`
-	MessageType  string
-	Model        string `plist:",omitempty"`
-	ModelName    string `plist:",omitempty"`
-	OSVersion    string `plist:",omitempty"`
-	ProductName  string `plist:",omitempty"`
-	SerialNumber string `plist:",omitempty"`
-	Topic        string
-	UDID         string
-	EnrollmentID string `plist:",omitempty"` // macOS 10.15 and iOS 13.0 and later
-}
-
-func mdmP7Sign(body []byte, cert *x509.Certificate, priv *rsa.PrivateKey) (string, error) {
-	signedData, err := pkcs7.NewSignedData(body)
-	if err != nil {
-		return "", err
-	}
-	signedData.AddSigner(cert, priv, pkcs7.SignerInfoConfig{})
-	signedData.Detach()
-	sig, err := signedData.Finish()
-	if err != nil {
-		return "", err
-	}
-	return base64.StdEncoding.EncodeToString(sig), nil
-}
-
-type TokenUpdateRequest struct {
-	AwaitingConfiguration bool   `plist:",omitempty"`
-	EnrollmentID          string `plist:",omitempty"` // macOS 10.15 and iOS 13.0 and later
-	EnrollmentUserID      string `plist:",omitempty"` // macOS 10.15 and iOS 13.0 and later
-	MessageType           string
-	NotOnConsole          bool `plist:",omitempty"`
-	PushMagic             string
-	Token                 []byte
-	Topic                 string
-	UDID                  string
-	UnlockToken           []byte `plist:",omitempty"`
-	UserShortName         string `plist:",omitempty"`
-	UserID                string `plist:",omitempty"`
-	UserLongName          string `plist:",omitempty"`
-}
-
-func CheckinRequest(i interface{}, device *device.Device, url string) error {
-	plistBytes, err := plist.Marshal(i)
-	if err != nil {
-		return err
-	}
-
-	mdmSig, err := mdmP7Sign(plistBytes, device.IdentityCertificate, device.IdentityPrivateKey)
-	if err != nil {
-		return err
-	}
-
-	client := &http.Client{}
-	req, err := http.NewRequest("PUT", url, bytes.NewReader(plistBytes))
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Mdm-Signature", mdmSig)
-
-	res, err := client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer res.Body.Close()
-
-	_, err = ioutil.ReadAll(res.Body)
-	if err != nil {
-		return err
-	}
-
-	if res.StatusCode != 200 {
-		return fmt.Errorf("Checkin Request failed with HTTP status: %d", res.StatusCode)
-	}
-
-	return nil
-}
-
-func TokenUpdate(device *device.Device, topic, url string) error {
-	tu := &TokenUpdateRequest{
-		MessageType: "TokenUpdate",
-		PushMagic:   "PushMagic",
-		Token:       []byte("token"),
-		Topic:       topic,
-		UDID:        device.UDID,
-	}
-
-	err := CheckinRequest(tu, device, url)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func writeCSR(csr []byte, filename string) error {
-	f, err := os.Create(filename)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-	pemBlock := &pem.Block{
-		Type:  "CERTIFICATE REQUEST",
-		Bytes: csr,
-	}
-	err = pem.Encode(f, pemBlock)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func writeCert(c *x509.Certificate, filename string) error {
-	f, err := os.Create(filename)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-	pemBlock := &pem.Block{
-		Type:  "CERTIFICATE",
-		Bytes: c.Raw,
-	}
-	err = pem.Encode(f, pemBlock)
-	if err != nil {
-		return err
-	}
 	return nil
 }

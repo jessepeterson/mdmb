@@ -1,18 +1,23 @@
 package device
 
 import (
-	"fmt"
+	"errors"
 
 	bolt "go.etcd.io/bbolt"
 )
 
-func (device *Device) Save(_ *bolt.DB) error {
+func (device *Device) validDevice() bool {
+	return device.UDID != ""
+}
 
-	// 	db, err := bolt.Open("devices.db", 0644, nil)
-	// 	if err != nil {
-	// 	  return err
-	// 	}
-	// 	defer db.Close()
-	fmt.Println("hi!")
-	return nil
+// Save device to bolt DB storage
+func (device *Device) Save(db *bolt.DB) error {
+	if !device.validDevice() {
+		return errors.New("invalid device")
+	}
+	return db.Update(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte("device"))
+		err := b.Put([]byte(device.UDID+"_serial"), []byte(device.Serial))
+		return err
+	})
 }

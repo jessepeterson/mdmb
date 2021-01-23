@@ -12,6 +12,23 @@ import (
 	"github.com/jessepeterson/mdmb/internal/mdmclient"
 )
 
+type subCmdFn func(string, []string, func())
+
+type subCmd struct {
+	Name        string
+	Description string
+	Func        subCmdFn
+}
+
+var subCmds []subCmd = []subCmd{
+	{"help", "Display usage help", help},
+	{"enroll", "enroll devices into MDM", enroll},
+}
+
+func help(_ string, _ []string, usage func()) {
+	usage()
+}
+
 func main() {
 	f := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
 	// var (
@@ -22,7 +39,9 @@ func main() {
 		fmt.Fprint(f.Output(), "\nFlags:\n")
 		f.PrintDefaults()
 		fmt.Fprint(f.Output(), "\nSubcommands:\n")
-		fmt.Fprintln(f.Output(), "    enroll\tenroll devices into MDM")
+		for _, sc := range subCmds {
+			fmt.Fprintf(f.Output(), "    %s\t%s\n", sc.Name, sc.Description)
+		}
 	}
 	f.Parse(os.Args[1:])
 
@@ -32,20 +51,20 @@ func main() {
 		os.Exit(2)
 	}
 
-	switch f.Args()[0] {
-	case "enroll":
-		enroll(f.Args()[1:], f.Usage)
-	case "help":
-		f.Usage()
-	default:
-		fmt.Fprintf(f.Output(), "invalid subcommand: %s\n", f.Args()[0])
-		f.Usage()
-		os.Exit(2)
+	for _, sc := range subCmds {
+		if f.Args()[0] == sc.Name {
+			sc.Func(sc.Name, f.Args()[1:], f.Usage)
+			return
+		}
 	}
+
+	fmt.Fprintf(f.Output(), "invalid subcommand: %s\n", f.Args()[0])
+	f.Usage()
+	os.Exit(2)
 }
 
-func enroll(args []string, usage func()) {
-	f := flag.NewFlagSet("enroll", flag.ExitOnError)
+func enroll(name string, args []string, usage func()) {
+	f := flag.NewFlagSet(name, flag.ExitOnError)
 	var (
 		// enrollType = f.String("type", "profile", "enrollment type")
 		// number     = f.Int("n", 1, "number of devices")

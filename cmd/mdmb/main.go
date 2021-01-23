@@ -5,14 +5,16 @@ import (
 	"flag"
 	"fmt"
 	"io/ioutil"
+	"log"
 	stdlog "log"
 	"os"
 
 	"github.com/jessepeterson/mdmb/internal/device"
 	"github.com/jessepeterson/mdmb/internal/mdmclient"
+	bolt "go.etcd.io/bbolt"
 )
 
-type subCmdFn func(string, []string, func())
+type subCmdFn func(string, []string, RunContext, func())
 
 type subCmd struct {
 	Name        string
@@ -20,20 +22,24 @@ type subCmd struct {
 	Func        subCmdFn
 }
 
-var subCmds []subCmd = []subCmd{
-	{"help", "Display usage help", help},
-	{"enroll", "enroll devices into MDM", enroll},
-}
-
-func help(_ string, _ []string, usage func()) {
+func help(_ string, _ []string, _ RunContext, usage func()) {
 	usage()
 }
 
+// RunContext contains "global" runtime environment settings
+type RunContext struct {
+	DB *bolt.DB
+}
+
 func main() {
+	var subCmds []subCmd = []subCmd{
+		{"help", "Display usage help", help},
+		{"enroll", "enroll devices into MDM", enroll},
+	}
 	f := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
-	// var (
-	// 	dbPath = f.String("db", "mdmb.db", "mdmb database file path")
-	// )
+	var (
+		dbPath = f.String("db", "mdmb.db", "mdmb database file path")
+	)
 	f.Usage = func() {
 		fmt.Fprintf(f.Output(), "%s [flags] <subcommand> [flags]\n", f.Name())
 		fmt.Fprint(f.Output(), "\nFlags:\n")
@@ -51,9 +57,29 @@ func main() {
 		os.Exit(2)
 	}
 
+	db, err := bolt.Open(*dbPath, 0644, nil)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer db.Close()
+
+	// make sure device bucket exists
+	err = db.Update(func(tx *bolt.Tx) error {
+		_, err := tx.CreateBucketIfNotExists([]byte("device"))
+		if err != nil {
+			return fmt.Errorf("create bucket: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	rctx := RunContext{DB: db}
+
 	for _, sc := range subCmds {
 		if f.Args()[0] == sc.Name {
-			sc.Func(sc.Name, f.Args()[1:], f.Usage)
+			sc.Func(sc.Name, f.Args()[1:], rctx, f.Usage)
 			return
 		}
 	}
@@ -63,7 +89,7 @@ func main() {
 	os.Exit(2)
 }
 
-func enroll(name string, args []string, usage func()) {
+func enroll(name string, args []string, rctx RunContext, usage func()) {
 	f := flag.NewFlagSet(name, flag.ExitOnError)
 	var (
 		// enrollType = f.String("type", "profile", "enrollment type")
@@ -89,7 +115,7 @@ func enroll(name string, args []string, usage func()) {
 		os.Exit(1)
 	}
 
-	if err := enrollWithFile(*file); err != nil {
+	if err := enrollWithFile(*file, rctx); err != nil {
 		stdlog.Fatal(err)
 	}
 
@@ -97,7 +123,7 @@ func enroll(name string, args []string, usage func()) {
 	// fmt.Println(c.UDID)
 }
 
-func enrollWithFile(path string) error {
+func enrollWithFile(path string, rctx RunContext) error {
 
 	ep, err := ioutil.ReadFile(path)
 	if err != nil {
@@ -109,6 +135,8 @@ func enrollWithFile(path string) error {
 		Serial:       "P3IJDS49Z90A",
 		ComputerName: "Malik's computer",
 	}
+
+	dev.Save(rctx.DB)
 
 	client := mdmclient.NewMDMClient(dev)
 

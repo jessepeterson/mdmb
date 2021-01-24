@@ -145,6 +145,8 @@ func enrollWithFile(path string, rctx RunContext) error {
 		return err
 	}
 
+	dev.Save(rctx.DB)
+
 	err = client.Connect()
 	if err != nil {
 		return err

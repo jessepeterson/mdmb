@@ -11,12 +11,16 @@ func (device *Device) validDevice() bool {
 	return device.UDID != ""
 }
 
-func putOrDelete(b *bolt.Bucket, uuid, extn string, value []byte) error {
-	key := []byte(uuid + "_" + extn)
-	if value == nil || len(value) == 0 {
-		return b.Delete(key)
+func putOrDeleteBucketRow(tx *bolt.Tx, bucket, key string, value []byte) error {
+	b, err := tx.CreateBucketIfNotExists([]byte(bucket))
+	if err != nil {
+		return err
 	}
-	return b.Put(key, value)
+	keyBytes := []byte(key)
+	if len(value) == 0 {
+		return b.Delete(keyBytes)
+	}
+	return b.Put(keyBytes, value)
 }
 
 // Save device to bolt DB storage
@@ -25,19 +29,15 @@ func (device *Device) Save(db *bolt.DB) error {
 		return errors.New("invalid device")
 	}
 	return db.Update(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte("device"))
-		err := putOrDelete(b, device.UDID, "udid", []byte(device.UDID))
+		err := putOrDeleteBucketRow(tx, "device_serial", device.UDID, []byte(device.Serial))
 		if err != nil {
 			return err
 		}
-		err = putOrDelete(b, device.UDID, "serial", []byte(device.Serial))
+		err = putOrDeleteBucketRow(tx, "device_computer_name", device.UDID, []byte(device.ComputerName))
 		if err != nil {
 			return err
 		}
-		err = putOrDelete(b, device.UDID, "computer_name", []byte(device.ComputerName))
-		if err != nil {
-			return err
-		}
+
 		// TODO: move this into some sort of pseudo-keychain
 		var cert []byte
 		if device.IdentityCertificate != nil {
@@ -45,7 +45,7 @@ func (device *Device) Save(db *bolt.DB) error {
 			copy(cert, device.IdentityCertificate.Raw)
 			fmt.Println(cert)
 		}
-		err = putOrDelete(b, device.UDID, "mdm_cert", cert)
+		err = putOrDeleteBucketRow(tx, "device_mdm_cert", device.UDID, cert)
 		if err != nil {
 			return err
 		}

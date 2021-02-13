@@ -8,6 +8,7 @@ import (
 	"log"
 	stdlog "log"
 	"os"
+	"text/tabwriter"
 
 	"github.com/jessepeterson/mdmb/internal/device"
 	"github.com/jessepeterson/mdmb/internal/mdmclient"
@@ -35,6 +36,7 @@ func main() {
 	var subCmds []subCmd = []subCmd{
 		{"help", "Display usage help", help},
 		{"enroll", "enroll devices into MDM", enroll},
+		{"devices-list", "bulk device management", devicesList},
 	}
 	f := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
 	var (
@@ -45,9 +47,11 @@ func main() {
 		fmt.Fprint(f.Output(), "\nFlags:\n")
 		f.PrintDefaults()
 		fmt.Fprint(f.Output(), "\nSubcommands:\n")
+		w := tabwriter.NewWriter(f.Output(), 4, 4, 4, ' ', 0)
 		for _, sc := range subCmds {
-			fmt.Fprintf(f.Output(), "    %s\t%s\n", sc.Name, sc.Description)
+			fmt.Fprintf(w, "\t%s\t%s\n", sc.Name, sc.Description)
 		}
+		w.Flush()
 	}
 	f.Parse(os.Args[1:])
 
@@ -153,4 +157,15 @@ func enrollWithFile(path string, rctx RunContext) error {
 	}
 
 	return nil
+}
+
+func devicesList(name string, args []string, rctx RunContext, usage func()) {
+	udids, err := device.List(rctx.DB)
+	if err != nil {
+		stdlog.Fatal(err)
+	}
+
+	for _, v := range udids {
+		fmt.Println(v)
+	}
 }

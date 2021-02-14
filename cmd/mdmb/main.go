@@ -34,9 +34,9 @@ type RunContext struct {
 func main() {
 	var subCmds []subCmd = []subCmd{
 		{"help", "Display usage help", help},
-		{"enroll", "enroll devices into MDM", enroll},
 		{"devices-list", "bulk device management", devicesList},
 		{"devices-create", "create new devices", devicesCreate},
+		{"devices-enroll", "enroll devices into MDM", devicesEnroll},
 	}
 	f := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
 	var (
@@ -67,18 +67,6 @@ func main() {
 	}
 	defer db.Close()
 
-	// make sure device bucket exists
-	err = db.Update(func(tx *bolt.Tx) error {
-		_, err := tx.CreateBucketIfNotExists([]byte("device"))
-		if err != nil {
-			return fmt.Errorf("create bucket: %w", err)
-		}
-		return nil
-	})
-	if err != nil {
-		log.Fatal(err)
-	}
-
 	rctx := RunContext{DB: db}
 
 	for _, sc := range subCmds {
@@ -93,12 +81,9 @@ func main() {
 	os.Exit(2)
 }
 
-func enroll(name string, args []string, rctx RunContext, usage func()) {
+func devicesEnroll(name string, args []string, rctx RunContext, usage func()) {
 	f := flag.NewFlagSet(name, flag.ExitOnError)
 	var (
-		// enrollType = f.String("type", "profile", "enrollment type")
-		// number     = f.Int("n", 1, "number of devices")
-		url  = f.String("url", "", "URL pointing to enrollment spec (e.g. profile)")
 		file = f.String("file", "", "file of enrollment spec (e.g. profile)")
 	)
 	f.Usage = func() {
@@ -108,55 +93,44 @@ func enroll(name string, args []string, rctx RunContext, usage func()) {
 	}
 	f.Parse(args)
 
-	if (*url == "" && *file == "") || (*url != "" && *file != "") {
-		fmt.Fprintln(f.Output(), "must specify one enrollment url or file")
+	if *file == "" {
+		fmt.Fprintln(f.Output(), "must specify enrollment profile")
 		f.Usage()
 		os.Exit(2)
 	}
 
-	if *url != "" {
-		fmt.Fprintln(f.Output(), "-url not yet supported")
-		os.Exit(1)
-	}
-
-	if err := enrollWithFile(*file, rctx); err != nil {
+	ep, err := ioutil.ReadFile(*file)
+	if err != nil {
 		log.Fatal(err)
 	}
 
-	// c := client.NewMDMClient()
-	// fmt.Println(c.UDID)
-}
-
-func enrollWithFile(path string, rctx RunContext) error {
-
-	ep, err := ioutil.ReadFile(path)
+	udids, err := device.List(rctx.DB)
 	if err != nil {
-		return err
+		log.Fatal(err)
 	}
 
-	dev := &device.Device{
-		UDID:         "475F0A29-6FCE-419E-A30F-9FF616FD2B87",
-		Serial:       "P3IJDS49Z90A",
-		ComputerName: "Malik's computer",
+	for _, u := range udids {
+		dev, err := device.Load(u, rctx.DB)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		fmt.Println(dev.UDID)
+
+		client := mdmclient.NewMDMClient(dev)
+
+		err = client.Enroll(ep, rand.Reader)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		dev.Save(rctx.DB)
+
+		err = client.Connect()
+		if err != nil {
+			log.Fatal(err)
+		}
 	}
-
-	dev.Save(rctx.DB)
-
-	client := mdmclient.NewMDMClient(dev)
-
-	err = client.Enroll(ep, rand.Reader)
-	if err != nil {
-		return err
-	}
-
-	dev.Save(rctx.DB)
-
-	err = client.Connect()
-	if err != nil {
-		return err
-	}
-
-	return nil
 }
 
 func devicesList(name string, args []string, rctx RunContext, usage func()) {

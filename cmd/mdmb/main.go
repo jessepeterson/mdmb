@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
-	stdlog "log"
 	"os"
 	"text/tabwriter"
 
@@ -37,6 +36,7 @@ func main() {
 		{"help", "Display usage help", help},
 		{"enroll", "enroll devices into MDM", enroll},
 		{"devices-list", "bulk device management", devicesList},
+		{"devices-create", "create new devices", devicesCreate},
 	}
 	f := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
 	var (
@@ -120,7 +120,7 @@ func enroll(name string, args []string, rctx RunContext, usage func()) {
 	}
 
 	if err := enrollWithFile(*file, rctx); err != nil {
-		stdlog.Fatal(err)
+		log.Fatal(err)
 	}
 
 	// c := client.NewMDMClient()
@@ -162,10 +162,34 @@ func enrollWithFile(path string, rctx RunContext) error {
 func devicesList(name string, args []string, rctx RunContext, usage func()) {
 	udids, err := device.List(rctx.DB)
 	if err != nil {
-		stdlog.Fatal(err)
+		log.Fatal(err)
 	}
 
 	for _, v := range udids {
 		fmt.Println(v)
 	}
+}
+
+func devicesCreate(name string, args []string, rctx RunContext, usage func()) {
+	f := flag.NewFlagSet(name, flag.ExitOnError)
+	var (
+		number = f.Int("n", 1, "number of devices")
+	)
+	f.Usage = func() {
+		usage()
+		fmt.Fprintf(f.Output(), "\nFlags for %s subcommand:\n", f.Name())
+		f.PrintDefaults()
+	}
+	f.Parse(args)
+
+	fmt.Println(*number)
+	for i := 0; i < *number; i++ {
+		d := device.New("")
+		err := d.Save(rctx.DB)
+		if err != nil {
+			log.Fatal(err)
+		}
+		fmt.Println(d.UDID)
+	}
+
 }

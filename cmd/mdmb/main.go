@@ -10,6 +10,7 @@ import (
 	"text/tabwriter"
 
 	"github.com/jessepeterson/mdmb/internal/device"
+	"github.com/jessepeterson/mdmb/internal/keychain"
 	"github.com/jessepeterson/mdmb/internal/mdmclient"
 	bolt "go.etcd.io/bbolt"
 )
@@ -163,6 +164,15 @@ func devicesCreate(name string, args []string, rctx RunContext, usage func()) {
 		if err != nil {
 			log.Fatal(err)
 		}
+
+		kc := keychain.New(d.UDID, keychain.KeychainSystem, rctx.DB)
+		kci := keychain.NewKeychainItem(kc, keychain.ClassCertificate)
+		kci.Item = []byte("hello, world!")
+		err = kci.Save()
+		if err != nil {
+			log.Fatal(err)
+		}
+
 		fmt.Println(d.UDID)
 	}
 

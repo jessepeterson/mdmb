@@ -2,33 +2,13 @@ package device
 
 import (
 	"errors"
-	"fmt"
 
+	"github.com/jessepeterson/mdmb/internal/boltprim"
 	bolt "go.etcd.io/bbolt"
 )
 
 func (device *Device) validDevice() bool {
 	return device.UDID != ""
-}
-
-func putOrDeleteBucketRow(tx *bolt.Tx, bucket, key string, value []byte) error {
-	b, err := tx.CreateBucketIfNotExists([]byte(bucket))
-	if err != nil {
-		return err
-	}
-	keyBytes := []byte(key)
-	if len(value) == 0 {
-		return b.Delete(keyBytes)
-	}
-	return b.Put(keyBytes, value)
-}
-
-func getBucketRow(tx *bolt.Tx, bucket, key string) []byte {
-	b := tx.Bucket([]byte(bucket))
-	if b == nil {
-		return nil
-	}
-	return b.Get([]byte(key))
 }
 
 // Save device to bolt DB storage
@@ -37,27 +17,11 @@ func (device *Device) Save(db *bolt.DB) error {
 		return errors.New("invalid device")
 	}
 	return db.Update(func(tx *bolt.Tx) error {
-		err := putOrDeleteBucketRow(tx, "device_serial", device.UDID, []byte(device.Serial))
+		err := boltprim.BucketPutOrDeleteString(tx, "device_serial", device.UDID, device.Serial)
 		if err != nil {
 			return err
 		}
-		err = putOrDeleteBucketRow(tx, "device_computer_name", device.UDID, []byte(device.ComputerName))
-		if err != nil {
-			return err
-		}
-
-		// TODO: move this into some sort of pseudo-keychain
-		var cert []byte
-		if device.IdentityCertificate != nil {
-			cert = make([]byte, len(device.IdentityCertificate.Raw))
-			copy(cert, device.IdentityCertificate.Raw)
-			fmt.Println(cert)
-		}
-		err = putOrDeleteBucketRow(tx, "device_mdm_cert", device.UDID, cert)
-		if err != nil {
-			return err
-		}
-		return nil
+		return boltprim.BucketPutOrDeleteString(tx, "device_computer_name", device.UDID, device.ComputerName)
 	})
 }
 
@@ -65,11 +29,11 @@ func (device *Device) Save(db *bolt.DB) error {
 func Load(udid string, db *bolt.DB) (device *Device, err error) {
 	device = &Device{UDID: udid}
 	err = db.View(func(tx *bolt.Tx) error {
-		device.Serial = string(getBucketRow(tx, "device_serial", udid))
+		device.Serial = boltprim.BucketGetString(tx, "device_serial", udid)
 		if device.Serial == "" {
 			return errors.New("device not found (serial not found)")
 		}
-		device.ComputerName = string(getBucketRow(tx, "device_computer_name", udid))
+		device.ComputerName = boltprim.BucketGetString(tx, "device_computer_name", udid)
 		return nil
 	})
 	return
@@ -80,7 +44,7 @@ func List(db *bolt.DB) (udids []string, err error) {
 	err = db.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte("device_serial"))
 		if b == nil {
-			return errors.New("no devices in database")
+			return nil
 		}
 		b.ForEach(func(k, _ []byte) error {
 			udids = append(udids, string(k))
@@ -88,5 +52,8 @@ func List(db *bolt.DB) (udids []string, err error) {
 		})
 		return nil
 	})
+	if len(udids) == 0 {
+		err = errors.New("no devices in database")
+	}
 	return
 }

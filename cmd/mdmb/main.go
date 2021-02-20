@@ -165,14 +165,6 @@ func devicesCreate(name string, args []string, rctx RunContext, usage func()) {
 			log.Fatal(err)
 		}
 
-		kc := keychain.New(d.UDID, keychain.KeychainSystem, rctx.DB)
-		kci := keychain.NewKeychainItem(kc, keychain.ClassCertificate)
-		kci.Item = []byte("hello, world!")
-		err = kci.Save()
-		if err != nil {
-			log.Fatal(err)
-		}
-
 		fmt.Println(d.UDID)
 	}
 

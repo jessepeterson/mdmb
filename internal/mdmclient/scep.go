@@ -98,7 +98,7 @@ func replaceSCEPVars(device *device.Device, istrs []string) (ostrs []string) {
 	return
 }
 
-func csrFromSCEPProfilePayload(pl *cfgprofiles.SCEPPayload, device *device.Device, rand io.Reader) ([]byte, error) {
+func csrFromSCEPProfilePayload(pl *cfgprofiles.SCEPPayload, device *device.Device, rand io.Reader, privKey *rsa.PrivateKey) ([]byte, error) {
 	plc := pl.PayloadContent
 
 	tmpl := &x509util.CertificateRequest{
@@ -139,7 +139,7 @@ func csrFromSCEPProfilePayload(pl *cfgprofiles.SCEPPayload, device *device.Devic
 		}
 	}
 	// TODO: SANs
-	return x509util.CreateCertificateRequest(rand, tmpl, device.IdentityPrivateKey)
+	return x509util.CreateCertificateRequest(rand, tmpl, privKey)
 }
 
 func selfSign() (*rsa.PrivateKey, *x509.Certificate, error) {

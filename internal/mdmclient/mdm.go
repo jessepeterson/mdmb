@@ -67,7 +67,7 @@ func (c *MDMClient) mdmP7Sign(body []byte) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	signedData.AddSigner(c.Device.IdentityCertificate, c.Device.IdentityPrivateKey, pkcs7.SignerInfoConfig{})
+	signedData.AddSigner(c.IdentityCertificate, c.IdentityPrivateKey, pkcs7.SignerInfoConfig{})
 	signedData.Detach()
 	sig, err := signedData.Finish()
 	if err != nil {

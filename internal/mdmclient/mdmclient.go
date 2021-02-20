@@ -1,6 +1,8 @@
 package mdmclient
 
 import (
+	"crypto/rsa"
+	"crypto/x509"
 	"errors"
 	"io"
 
@@ -12,6 +14,9 @@ import (
 type MDMClient struct {
 	Device     *device.Device
 	MDMPayload *cfgprofiles.MDMPayload
+
+	IdentityCertificate *x509.Certificate
+	IdentityPrivateKey  *rsa.PrivateKey
 }
 
 func NewMDMClient(device *device.Device) *MDMClient {
@@ -40,17 +45,17 @@ func (c *MDMClient) Enroll(ep []byte, rand io.Reader) error {
 	}
 	scepPld := scepPlds[0]
 
-	c.Device.IdentityPrivateKey, err = keyFromSCEPProfilePayload(scepPld, rand)
+	c.IdentityPrivateKey, err = keyFromSCEPProfilePayload(scepPld, rand)
 	if err != nil {
 		return err
 	}
 
-	csrBytes, err := csrFromSCEPProfilePayload(scepPld, c.Device, rand)
+	csrBytes, err := csrFromSCEPProfilePayload(scepPld, c.Device, rand, c.IdentityPrivateKey)
 	if err != nil {
 		return err
 	}
 
-	c.Device.IdentityCertificate, err = scepNewPKCSReq(csrBytes, scepPld.PayloadContent.URL, scepPld.PayloadContent.Challenge)
+	c.IdentityCertificate, err = scepNewPKCSReq(csrBytes, scepPld.PayloadContent.URL, scepPld.PayloadContent.Challenge)
 	if err != nil {
 		return err
 	}

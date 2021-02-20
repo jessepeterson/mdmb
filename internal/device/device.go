@@ -1,8 +1,6 @@
 package device
 
 import (
-	"crypto/rsa"
-	"crypto/x509"
 	"math/rand"
 	"strings"
 
@@ -14,9 +12,6 @@ type Device struct {
 	UDID         string
 	Serial       string
 	ComputerName string
-
-	IdentityCertificate *x509.Certificate
-	IdentityPrivateKey  *rsa.PrivateKey
 }
 
 // New creates a new device with a random serial number and UDID

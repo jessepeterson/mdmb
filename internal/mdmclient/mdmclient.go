@@ -45,6 +45,10 @@ func (c *MDMClient) Enroll(ep []byte, rand io.Reader) error {
 	}
 	scepPld := scepPlds[0]
 
+	if !c.MDMPayload.SignMessage {
+		return errors.New("non-SignMessage (mTLS) enrollment not supported")
+	}
+
 	c.IdentityPrivateKey, err = keyFromSCEPProfilePayload(scepPld, rand)
 	if err != nil {
 		return err
@@ -58,10 +62,6 @@ func (c *MDMClient) Enroll(ep []byte, rand io.Reader) error {
 	c.IdentityCertificate, err = scepNewPKCSReq(csrBytes, scepPld.PayloadContent.URL, scepPld.PayloadContent.Challenge)
 	if err != nil {
 		return err
-	}
-
-	if !c.MDMPayload.SignMessage {
-		return errors.New("non-SignMessage (mTLS) enrollment not supported")
 	}
 
 	err = c.authenticate()

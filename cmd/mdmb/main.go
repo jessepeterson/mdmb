@@ -10,6 +10,7 @@ import (
 	"text/tabwriter"
 
 	"github.com/jessepeterson/mdmb/internal/device"
+	"github.com/jessepeterson/mdmb/internal/keychain"
 	"github.com/jessepeterson/mdmb/internal/mdmclient"
 	bolt "go.etcd.io/bbolt"
 )
@@ -117,7 +118,10 @@ func devicesEnroll(name string, args []string, rctx RunContext, usage func()) {
 
 		fmt.Println(dev.UDID)
 
-		client := mdmclient.NewMDMClient(dev)
+		// create reference to this device's system keychain
+		kc := keychain.New(dev.UDID, keychain.KeychainSystem, rctx.DB)
+
+		client := mdmclient.NewMDMClient(dev, kc)
 
 		err = client.Enroll(ep, rand.Reader)
 		if err != nil {

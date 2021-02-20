@@ -5,22 +5,25 @@ import (
 	"crypto/x509"
 	"errors"
 	"io"
+	"strings"
 
 	"github.com/groob/plist"
 	"github.com/jessepeterson/cfgprofiles"
 	"github.com/jessepeterson/mdmb/internal/device"
+	"github.com/jessepeterson/mdmb/internal/keychain"
 )
 
 type MDMClient struct {
 	Device     *device.Device
+	Keychain   *keychain.Keychain
 	MDMPayload *cfgprofiles.MDMPayload
 
 	IdentityCertificate *x509.Certificate
 	IdentityPrivateKey  *rsa.PrivateKey
 }
 
-func NewMDMClient(device *device.Device) *MDMClient {
-	return &MDMClient{Device: device}
+func NewMDMClient(device *device.Device, kc *keychain.Keychain) *MDMClient {
+	return &MDMClient{Device: device, Keychain: kc}
 }
 
 // Enroll attempts an Apple MDM enrollment using profile ep
@@ -64,6 +67,11 @@ func (c *MDMClient) Enroll(ep []byte, rand io.Reader) error {
 		return err
 	}
 
+	err = c.SaveMDMIdentity()
+	if err != nil {
+		return err
+	}
+
 	err = c.authenticate()
 	if err != nil {
 		return err
@@ -76,3 +84,29 @@ func (c *MDMClient) Enroll(ep []byte, rand io.Reader) error {
 
 	return nil
 }
+
+func (c *MDMClient) SaveMDMIdentity() error {
+	// save pk to device keychain
+
+	kciKey := keychain.NewKeychainItem(c.Keychain, keychain.ClassKey)
+	kciKey.Item = x509.MarshalPKCS1PrivateKey(c.IdentityPrivateKey)
+	kciKey.Save()
+
+	kciCert := keychain.NewKeychainItem(c.Keychain, keychain.ClassCertificate)
+	kciCert.Item = c.IdentityCertificate.Raw
+	kciCert.Save()
+
+	kciID := keychain.NewKeychainItem(c.Keychain, keychain.ClassIdentity)
+	kciID.Item = []byte(strings.Join([]string{kciKey.UUID, kciCert.UUID}, ","))
+	kciID.Save()
+
+	// save cert to device keychain
+	// save "identity" to device keychain
+	return nil
+}
+
+// func (c *MDMClient) LoadMDMIdentity() error {
+// 	// load "identity" from device keychain
+// 	// load cert from device keychain
+// 	// load pk from device keychain
+// }

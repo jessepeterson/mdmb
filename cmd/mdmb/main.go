@@ -10,7 +10,6 @@ import (
 	"text/tabwriter"
 
 	"github.com/jessepeterson/mdmb/internal/device"
-	"github.com/jessepeterson/mdmb/internal/keychain"
 	"github.com/jessepeterson/mdmb/internal/mdmclient"
 	bolt "go.etcd.io/bbolt"
 )

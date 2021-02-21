@@ -41,6 +41,7 @@ func main() {
 		{"devices-list", "bulk device management", devicesList},
 		{"devices-create", "create new devices", devicesCreate},
 		{"devices-enroll", "enroll devices into MDM", devicesEnroll},
+		{"devices-connect", "devices connect to MDM", devicesConnect},
 	}
 	f := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
 	var (
@@ -181,4 +182,35 @@ func devicesCreate(name string, args []string, rctx RunContext, usage func()) {
 		fmt.Println(d.UDID)
 	}
 
+}
+
+func devicesConnect(name string, args []string, rctx RunContext, usage func()) {
+	udids, err := device.List(rctx.DB)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	for _, u := range udids {
+		dev, err := device.Load(u, rctx.DB)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		fmt.Println(dev.UDID)
+
+		// create reference to this device's system keychain
+		kc := keychain.New(dev.UDID, keychain.KeychainSystem, rctx.DB)
+
+		ps := profiles.New(dev.UDID, rctx.DB)
+
+		client, err := mdmclient.NewMDMClient(dev, kc, ps)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		err = client.Connect()
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
 }

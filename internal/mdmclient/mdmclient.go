@@ -32,6 +32,17 @@ func NewMDMClient(device *device.Device, kc *keychain.Keychain, ps *profiles.Pro
 			return c, err
 		}
 	}
+	if device.MDMProfileIdentifier != "" {
+		profile, err := ps.Load(device.MDMProfileIdentifier)
+		if err != nil {
+			return c, err
+		}
+		mdmPlds := profile.MDMPayloads()
+		if len(mdmPlds) != 1 {
+			return c, errors.New("enrollment profile must contain an MDM payload")
+		}
+		c.MDMPayload = mdmPlds[0]
+	}
 	return c, nil
 }
 

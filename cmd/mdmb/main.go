@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	mathrand "math/rand"
 	"os"
 	"text/tabwriter"
+	"time"
 
 	"github.com/jessepeterson/mdmb/internal/device"
 	"github.com/jessepeterson/mdmb/internal/keychain"
@@ -67,6 +69,8 @@ func main() {
 		log.Fatal(err)
 	}
 	defer db.Close()
+
+	mathrand.Seed(time.Now().UnixNano())
 
 	rctx := RunContext{DB: db}
 

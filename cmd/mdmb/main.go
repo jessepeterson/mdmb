@@ -121,7 +121,10 @@ func devicesEnroll(name string, args []string, rctx RunContext, usage func()) {
 		// create reference to this device's system keychain
 		kc := keychain.New(dev.UDID, keychain.KeychainSystem, rctx.DB)
 
-		client := mdmclient.NewMDMClient(dev, kc)
+		client, err := mdmclient.NewMDMClient(dev, kc)
+		if err != nil {
+			log.Fatal(err)
+		}
 
 		err = client.Enroll(ep, rand.Reader)
 		if err != nil {

@@ -21,8 +21,16 @@ type MDMClient struct {
 	IdentityPrivateKey  *rsa.PrivateKey
 }
 
-func NewMDMClient(device *device.Device, kc *keychain.Keychain) *MDMClient {
-	return &MDMClient{Device: device, Keychain: kc}
+func NewMDMClient(device *device.Device, kc *keychain.Keychain) (*MDMClient, error) {
+	c := &MDMClient{Device: device, Keychain: kc}
+	if device.MDMIdentityKeychainUUID != "" {
+		var err error
+		c.IdentityPrivateKey, c.IdentityCertificate, err = c.loadOrDeleteMDMIdentity(device.MDMIdentityKeychainUUID, false)
+		if err != nil {
+			return c, err
+		}
+	}
+	return c, nil
 }
 
 // Enroll attempts an Apple MDM enrollment using profile ep

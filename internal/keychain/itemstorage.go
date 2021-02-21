@@ -27,6 +27,16 @@ func (kci *KeychainItem) Save() error {
 	})
 }
 
+func (kci *KeychainItem) Delete() error {
+	return kci.Keychain.DB.Update(func(tx *bolt.Tx) error {
+		err := boltprim.BucketPutOrDelete(tx, "keychain_items_item", kci.boltKey(), nil)
+		if err != nil {
+			return err
+		}
+		return boltprim.BucketPutOrDeleteInt(tx, "keychain_item_class", kci.boltKey(), 0)
+	})
+}
+
 // LoadKeychainItem loads a *KeychainItem from a keychain's BoltDB.
 func LoadKeychainItem(kc *Keychain, uuid string) (kci *KeychainItem, err error) {
 	kci = &KeychainItem{

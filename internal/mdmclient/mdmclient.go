@@ -85,8 +85,13 @@ func (c *MDMClient) Enroll(ep []byte, rand io.Reader) error {
 }
 
 func (c *MDMClient) SaveMDMIdentity() error {
-	// save old ID for old identity removal
-	// _ = c.Device.MDMIdentityKeychainUUID
+	// delete old identity if it exists
+	if c.Device.MDMIdentityKeychainUUID != "" {
+		_, _, err := c.loadOrDeleteMDMIdentity(c.Device.MDMIdentityKeychainUUID, true)
+		if err != nil {
+			return err
+		}
+	}
 
 	kciKey := keychain.NewKeychainItem(c.Keychain, keychain.ClassKey)
 	kciKey.Key = c.IdentityPrivateKey
@@ -106,8 +111,27 @@ func (c *MDMClient) SaveMDMIdentity() error {
 	return nil
 }
 
-// func (c *MDMClient) LoadMDMIdentity() error {
-// 	// load "identity" from device keychain
-// 	// load cert from device keychain
-// 	// load pk from device keychain
-// }
+func (c *MDMClient) loadOrDeleteMDMIdentity(uuid string, delete bool) (*rsa.PrivateKey, *x509.Certificate, error) {
+	kciID, err := keychain.LoadKeychainItem(c.Keychain, c.Device.MDMIdentityKeychainUUID)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	kciKey, err := keychain.LoadKeychainItem(c.Keychain, kciID.IdentityKeyUUID)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	kciCert, err := keychain.LoadKeychainItem(c.Keychain, kciID.IdentityCertificateUUID)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	if delete {
+		kciCert.Delete()
+		kciKey.Delete()
+		kciID.Delete()
+	}
+
+	return kciKey.Key, kciCert.Certificate, nil
+}

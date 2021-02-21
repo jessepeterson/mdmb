@@ -10,19 +10,21 @@ import (
 	"github.com/jessepeterson/cfgprofiles"
 	"github.com/jessepeterson/mdmb/internal/device"
 	"github.com/jessepeterson/mdmb/internal/keychain"
+	"github.com/jessepeterson/mdmb/internal/profiles"
 )
 
 type MDMClient struct {
-	Device     *device.Device
-	Keychain   *keychain.Keychain
-	MDMPayload *cfgprofiles.MDMPayload
+	Device       *device.Device
+	ProfileStore *profiles.ProfileStore
+	Keychain     *keychain.Keychain
+	MDMPayload   *cfgprofiles.MDMPayload
 
 	IdentityCertificate *x509.Certificate
 	IdentityPrivateKey  *rsa.PrivateKey
 }
 
-func NewMDMClient(device *device.Device, kc *keychain.Keychain) (*MDMClient, error) {
-	c := &MDMClient{Device: device, Keychain: kc}
+func NewMDMClient(device *device.Device, kc *keychain.Keychain, ps *profiles.ProfileStore) (*MDMClient, error) {
+	c := &MDMClient{Device: device, Keychain: kc, ProfileStore: ps}
 	if device.MDMIdentityKeychainUUID != "" {
 		var err error
 		c.IdentityPrivateKey, c.IdentityCertificate, err = c.loadOrDeleteMDMIdentity(device.MDMIdentityKeychainUUID, false)
@@ -90,6 +92,7 @@ func (c *MDMClient) Enroll(ep []byte, rand io.Reader) error {
 	}
 
 	c.Device.MDMProfileIdentifier = profile.PayloadIdentifier
+	c.ProfileStore.Install(ep)
 
 	return nil
 }

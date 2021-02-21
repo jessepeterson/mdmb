@@ -5,7 +5,6 @@ import (
 	"crypto/x509"
 	"errors"
 	"io"
-	"strings"
 
 	"github.com/groob/plist"
 	"github.com/jessepeterson/cfgprofiles"
@@ -89,15 +88,16 @@ func (c *MDMClient) SaveMDMIdentity() error {
 	// save pk to device keychain
 
 	kciKey := keychain.NewKeychainItem(c.Keychain, keychain.ClassKey)
-	kciKey.Item = x509.MarshalPKCS1PrivateKey(c.IdentityPrivateKey)
+	kciKey.Key = c.IdentityPrivateKey
 	kciKey.Save()
 
 	kciCert := keychain.NewKeychainItem(c.Keychain, keychain.ClassCertificate)
-	kciCert.Item = c.IdentityCertificate.Raw
+	kciCert.Certificate = c.IdentityCertificate
 	kciCert.Save()
 
 	kciID := keychain.NewKeychainItem(c.Keychain, keychain.ClassIdentity)
-	kciID.Item = []byte(strings.Join([]string{kciKey.UUID, kciCert.UUID}, ","))
+	kciID.IdentityKeyUUID = kciKey.UUID
+	kciID.IdentityCertificateUUID = kciCert.UUID
 	kciID.Save()
 
 	// save cert to device keychain

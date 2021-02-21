@@ -14,6 +14,10 @@ func (kci *KeychainItem) boltKey() string {
 
 // Save writes a keychain item to a keychain's BoltDB.
 func (kci *KeychainItem) Save() error {
+	err := kci.encode()
+	if err != nil {
+		return err
+	}
 	return kci.Keychain.DB.Update(func(tx *bolt.Tx) error {
 		err := boltprim.BucketPutOrDelete(tx, "keychain_items_item", kci.boltKey(), kci.Item)
 		if err != nil {
@@ -40,5 +44,9 @@ func LoadKeychainItem(kc *Keychain, uuid string) (kci *KeychainItem, err error) 
 		}
 		return nil
 	})
+	if err != nil {
+		return
+	}
+	err = kci.decode()
 	return
 }

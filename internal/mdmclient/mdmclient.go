@@ -74,11 +74,6 @@ func (c *MDMClient) Enroll(ep []byte, rand io.Reader) error {
 		return err
 	}
 
-	err = c.saveMDMIdentity()
-	if err != nil {
-		return err
-	}
-
 	err = c.authenticate()
 	if err != nil {
 		return err
@@ -88,6 +83,13 @@ func (c *MDMClient) Enroll(ep []byte, rand io.Reader) error {
 	if err != nil {
 		return err
 	}
+
+	err = c.saveMDMIdentity()
+	if err != nil {
+		return err
+	}
+
+	c.Device.MDMProfileIdentifier = profile.PayloadIdentifier
 
 	return nil
 }

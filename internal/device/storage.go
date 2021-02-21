@@ -25,7 +25,11 @@ func (device *Device) Save(db *bolt.DB) error {
 		if err != nil {
 			return err
 		}
-		return boltprim.BucketPutOrDeleteString(tx, "device_mdm_identity_keychain_uuid", device.UDID, device.MDMIdentityKeychainUUID)
+		err = boltprim.BucketPutOrDeleteString(tx, "device_mdm_identity_keychain_uuid", device.UDID, device.MDMIdentityKeychainUUID)
+		if err != nil {
+			return err
+		}
+		return boltprim.BucketPutOrDeleteString(tx, "device_mdm_profile_id", device.UDID, device.MDMProfileIdentifier)
 	})
 }
 
@@ -39,6 +43,7 @@ func Load(udid string, db *bolt.DB) (device *Device, err error) {
 		}
 		device.ComputerName = boltprim.BucketGetString(tx, "device_computer_name", udid)
 		device.MDMIdentityKeychainUUID = boltprim.BucketGetString(tx, "device_mdm_identity_keychain_uuid", udid)
+		device.MDMProfileIdentifier = boltprim.BucketGetString(tx, "device_mdm_profile_id", udid)
 		return nil
 	})
 	return

@@ -66,7 +66,7 @@ func (c *MDMClient) Enroll(ep []byte, rand io.Reader) error {
 		return err
 	}
 
-	err = c.SaveMDMIdentity()
+	err = c.saveMDMIdentity()
 	if err != nil {
 		return err
 	}
@@ -84,7 +84,7 @@ func (c *MDMClient) Enroll(ep []byte, rand io.Reader) error {
 	return nil
 }
 
-func (c *MDMClient) SaveMDMIdentity() error {
+func (c *MDMClient) saveMDMIdentity() error {
 	// delete old identity if it exists
 	if c.Device.MDMIdentityKeychainUUID != "" {
 		_, _, err := c.loadOrDeleteMDMIdentity(c.Device.MDMIdentityKeychainUUID, true)

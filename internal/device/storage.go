@@ -21,7 +21,11 @@ func (device *Device) Save(db *bolt.DB) error {
 		if err != nil {
 			return err
 		}
-		return boltprim.BucketPutOrDeleteString(tx, "device_computer_name", device.UDID, device.ComputerName)
+		err = boltprim.BucketPutOrDeleteString(tx, "device_computer_name", device.UDID, device.ComputerName)
+		if err != nil {
+			return err
+		}
+		return boltprim.BucketPutOrDeleteString(tx, "device_mdm_identity_keychain_uuid", device.UDID, device.MDMIdentityKeychainUUID)
 	})
 }
 
@@ -34,6 +38,7 @@ func Load(udid string, db *bolt.DB) (device *Device, err error) {
 			return errors.New("device not found (serial not found)")
 		}
 		device.ComputerName = boltprim.BucketGetString(tx, "device_computer_name", udid)
+		device.MDMIdentityKeychainUUID = boltprim.BucketGetString(tx, "device_mdm_identity_keychain_uuid", udid)
 		return nil
 	})
 	return

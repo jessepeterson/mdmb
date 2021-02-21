@@ -85,7 +85,8 @@ func (c *MDMClient) Enroll(ep []byte, rand io.Reader) error {
 }
 
 func (c *MDMClient) SaveMDMIdentity() error {
-	// save pk to device keychain
+	// save old ID for old identity removal
+	// _ = c.Device.MDMIdentityKeychainUUID
 
 	kciKey := keychain.NewKeychainItem(c.Keychain, keychain.ClassKey)
 	kciKey.Key = c.IdentityPrivateKey
@@ -100,8 +101,8 @@ func (c *MDMClient) SaveMDMIdentity() error {
 	kciID.IdentityCertificateUUID = kciCert.UUID
 	kciID.Save()
 
-	// save cert to device keychain
-	// save "identity" to device keychain
+	c.Device.MDMIdentityKeychainUUID = kciID.UUID
+
 	return nil
 }
 

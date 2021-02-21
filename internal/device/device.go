@@ -12,6 +12,8 @@ type Device struct {
 	UDID         string
 	Serial       string
 	ComputerName string
+
+	MDMIdentityKeychainUUID string
 }
 
 // New creates a new device with a random serial number and UDID

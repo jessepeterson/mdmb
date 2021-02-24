@@ -119,7 +119,8 @@ func devicesEnroll(name string, args []string, rctx RunContext, usage func()) {
 	for _, u := range udids {
 		dev, err := device.Load(u, rctx.DB)
 		if err != nil {
-			log.Fatal(err)
+			log.Println(err)
+			continue
 		}
 
 		fmt.Println(dev.UDID)
@@ -131,17 +132,17 @@ func devicesEnroll(name string, args []string, rctx RunContext, usage func()) {
 
 		client, err := mdmclient.NewMDMClient(dev, kc, ps)
 		if err != nil {
-			log.Fatal(err)
+			log.Println(err)
+			continue
 		}
 
 		err = client.Enroll(ep, rand.Reader)
 		if err != nil {
-			log.Fatal(err)
+			log.Println(err)
+			continue
 		}
 
-		dev.Save(rctx.DB)
-
-		err = client.Connect()
+		err = dev.Save(rctx.DB)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -193,7 +194,8 @@ func devicesConnect(name string, args []string, rctx RunContext, usage func()) {
 	for _, u := range udids {
 		dev, err := device.Load(u, rctx.DB)
 		if err != nil {
-			log.Fatal(err)
+			log.Println(err)
+			continue
 		}
 
 		fmt.Println(dev.UDID)
@@ -205,12 +207,14 @@ func devicesConnect(name string, args []string, rctx RunContext, usage func()) {
 
 		client, err := mdmclient.NewMDMClient(dev, kc, ps)
 		if err != nil {
-			log.Fatal(err)
+			log.Println(err)
+			continue
 		}
 
 		err = client.Connect()
 		if err != nil {
-			log.Fatal(err)
+			log.Println(err)
+			continue
 		}
 	}
 }

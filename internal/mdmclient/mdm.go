@@ -3,6 +3,7 @@ package mdmclient
 import (
 	"bytes"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -63,6 +64,9 @@ type ConnectRequest struct {
 
 // Generates "SignMessage" HTTP header data
 func (c *MDMClient) mdmP7Sign(body []byte) (string, error) {
+	if c.IdentityCertificate == nil || c.IdentityPrivateKey == nil {
+		return "", errors.New("device identity invalid")
+	}
 	signedData, err := pkcs7.NewSignedData(body)
 	if err != nil {
 		return "", err
@@ -169,14 +173,11 @@ func (c *MDMClient) Connect() error {
 	}
 	defer res.Body.Close()
 
-	xat, err := ioutil.ReadAll(res.Body)
+	_, err = ioutil.ReadAll(res.Body)
 	if err != nil {
 		return err
 	}
-	fmt.Println("===> Connect")
-	fmt.Println(res.Header)
-	fmt.Println(string(xat))
-	fmt.Println("===> Connect")
+	// TODO: actually handle the MDM server response ;P
 
 	if res.StatusCode != 200 {
 		return fmt.Errorf("Checkin Request failed with HTTP status: %d", res.StatusCode)

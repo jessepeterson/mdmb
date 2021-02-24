@@ -37,8 +37,6 @@ func BucketGetString(tx *bolt.Tx, bucket, key string) string {
 	return string(BucketGet(tx, bucket, key))
 }
 
-// return b.Put(keyBytes, []byte(strconv.Itoa(kci.Class)))
-
 // BucketPutOrDeleteInt Puts a value to a BoltDB bucket. If the value is 0 the key is Deleted.
 func BucketPutOrDeleteInt(tx *bolt.Tx, bucket, key string, value int) error {
 	var byteValue []byte

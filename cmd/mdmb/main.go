@@ -88,16 +88,20 @@ func main() {
 	os.Exit(2)
 }
 
-func devicesEnroll(name string, args []string, rctx RunContext, usage func()) {
-	f := flag.NewFlagSet(name, flag.ExitOnError)
-	var (
-		file = f.String("file", "", "file of enrollment spec (e.g. profile)")
-	)
+func setSubCommandFlagSetUsage(f *flag.FlagSet, usage func()) {
 	f.Usage = func() {
 		usage()
 		fmt.Fprintf(f.Output(), "\nFlags for %s subcommand:\n", f.Name())
 		f.PrintDefaults()
 	}
+}
+
+func devicesEnroll(name string, args []string, rctx RunContext, usage func()) {
+	f := flag.NewFlagSet(name, flag.ExitOnError)
+	var (
+		file = f.String("file", "", "file of enrollment spec (e.g. profile)")
+	)
+	setSubCommandFlagSetUsage(f, usage)
 	f.Parse(args)
 
 	if *file == "" {
@@ -165,11 +169,7 @@ func devicesCreate(name string, args []string, rctx RunContext, usage func()) {
 	var (
 		number = f.Int("n", 1, "number of devices")
 	)
-	f.Usage = func() {
-		usage()
-		fmt.Fprintf(f.Output(), "\nFlags for %s subcommand:\n", f.Name())
-		f.PrintDefaults()
-	}
+	setSubCommandFlagSetUsage(f, usage)
 	f.Parse(args)
 
 	fmt.Println(*number)

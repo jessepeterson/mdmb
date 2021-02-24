@@ -38,7 +38,7 @@ type RunContext struct {
 func main() {
 	var subCmds []subCmd = []subCmd{
 		{"help", "Display usage help", help},
-		{"devices-list", "bulk device management", devicesList},
+		{"devices-list", "list created devices", devicesList},
 		{"devices-create", "create new devices", devicesCreate},
 		{"devices-enroll", "enroll devices into MDM", devicesEnroll},
 		{"devices-connect", "devices connect to MDM", devicesConnect},

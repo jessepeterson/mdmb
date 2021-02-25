@@ -186,10 +186,20 @@ func devicesCreate(name string, args []string, rctx RunContext, usage func()) {
 }
 
 func devicesConnect(name string, args []string, rctx RunContext, usage func()) {
+	f := flag.NewFlagSet(name, flag.ExitOnError)
+	var (
+		workers    = f.Int("w", 1, "workers (concurrency)")
+		iterations = f.Int("i", 1, "number of iterations of connects")
+	)
+	setSubCommandFlagSetUsage(f, usage)
+	f.Parse(args)
+
 	udids, err := device.List(rctx.DB)
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	workerData := []*ConnectWorkerData{}
 
 	for _, u := range udids {
 		dev, err := device.Load(u, rctx.DB)
@@ -197,8 +207,6 @@ func devicesConnect(name string, args []string, rctx RunContext, usage func()) {
 			log.Println(err)
 			continue
 		}
-
-		fmt.Println(dev.UDID)
 
 		// create reference to this device's system keychain
 		kc := keychain.New(dev.UDID, keychain.KeychainSystem, rctx.DB)
@@ -211,10 +219,12 @@ func devicesConnect(name string, args []string, rctx RunContext, usage func()) {
 			continue
 		}
 
-		err = client.Connect()
-		if err != nil {
-			log.Println(err)
-			continue
-		}
+		workerData = append(workerData, &ConnectWorkerData{
+			Device:    dev,
+			MDMClient: client,
+		})
 	}
+
+	fmt.Printf("starting %d workers for %d iterations\n", *workers, *iterations)
+	PooledConnectWork(workerData, *workers, *iterations)
 }

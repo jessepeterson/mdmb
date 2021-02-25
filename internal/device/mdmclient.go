@@ -1,4 +1,4 @@
-package mdmclient
+package device
 
 import (
 	"crypto/rsa"
@@ -8,22 +8,19 @@ import (
 
 	"github.com/groob/plist"
 	"github.com/jessepeterson/cfgprofiles"
-	"github.com/jessepeterson/mdmb/internal/device"
-	"github.com/jessepeterson/mdmb/internal/keychain"
-	"github.com/jessepeterson/mdmb/internal/profiles"
 )
 
 type MDMClient struct {
-	Device       *device.Device
-	ProfileStore *profiles.ProfileStore
-	Keychain     *keychain.Keychain
+	Device       *Device
+	ProfileStore *ProfileStore
+	Keychain     *Keychain
 	MDMPayload   *cfgprofiles.MDMPayload
 
 	IdentityCertificate *x509.Certificate
 	IdentityPrivateKey  *rsa.PrivateKey
 }
 
-func NewMDMClient(device *device.Device, kc *keychain.Keychain, ps *profiles.ProfileStore) (*MDMClient, error) {
+func NewMDMClient(device *Device, kc *Keychain, ps *ProfileStore) (*MDMClient, error) {
 	c := &MDMClient{Device: device, Keychain: kc, ProfileStore: ps}
 	if device.MDMIdentityKeychainUUID != "" {
 		var err error
@@ -117,15 +114,15 @@ func (c *MDMClient) saveMDMIdentity() error {
 		}
 	}
 
-	kciKey := keychain.NewKeychainItem(c.Keychain, keychain.ClassKey)
+	kciKey := NewKeychainItem(c.Keychain, ClassKey)
 	kciKey.Key = c.IdentityPrivateKey
 	kciKey.Save()
 
-	kciCert := keychain.NewKeychainItem(c.Keychain, keychain.ClassCertificate)
+	kciCert := NewKeychainItem(c.Keychain, ClassCertificate)
 	kciCert.Certificate = c.IdentityCertificate
 	kciCert.Save()
 
-	kciID := keychain.NewKeychainItem(c.Keychain, keychain.ClassIdentity)
+	kciID := NewKeychainItem(c.Keychain, ClassIdentity)
 	kciID.IdentityKeyUUID = kciKey.UUID
 	kciID.IdentityCertificateUUID = kciCert.UUID
 	kciID.Save()
@@ -136,17 +133,17 @@ func (c *MDMClient) saveMDMIdentity() error {
 }
 
 func (c *MDMClient) loadOrDeleteMDMIdentity(uuid string, delete bool) (*rsa.PrivateKey, *x509.Certificate, error) {
-	kciID, err := keychain.LoadKeychainItem(c.Keychain, c.Device.MDMIdentityKeychainUUID)
+	kciID, err := LoadKeychainItem(c.Keychain, c.Device.MDMIdentityKeychainUUID)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	kciKey, err := keychain.LoadKeychainItem(c.Keychain, kciID.IdentityKeyUUID)
+	kciKey, err := LoadKeychainItem(c.Keychain, kciID.IdentityKeyUUID)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	kciCert, err := keychain.LoadKeychainItem(c.Keychain, kciID.IdentityCertificateUUID)
+	kciCert, err := LoadKeychainItem(c.Keychain, kciID.IdentityCertificateUUID)
 	if err != nil {
 		return nil, nil, err
 	}

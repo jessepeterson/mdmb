@@ -1,4 +1,4 @@
-package keychain
+package device
 
 import (
 	bolt "go.etcd.io/bbolt"
@@ -15,7 +15,7 @@ type Keychain struct {
 	DB *bolt.DB
 }
 
-func New(id, kcType string, db *bolt.DB) *Keychain {
+func NewKeychain(id, kcType string, db *bolt.DB) *Keychain {
 	return &Keychain{
 		ID:   id,
 		Type: kcType,

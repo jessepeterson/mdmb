@@ -11,12 +11,11 @@ import (
 	"time"
 
 	"github.com/jessepeterson/mdmb/internal/device"
-	"github.com/jessepeterson/mdmb/internal/mdmclient"
 )
 
 type ConnectWorkerData struct {
 	Device    *device.Device
-	MDMClient *mdmclient.MDMClient
+	MDMClient *device.MDMClient
 }
 
 func connectWork(cwd *ConnectWorkerData) error {
@@ -37,6 +36,7 @@ func startConnectWorkers(cwds []*ConnectWorkerData, workers, iterations int) {
 		durrHi  time.Duration
 	)
 	durrVals := make([]time.Duration, iterations*len(cwds))
+	fmt.Printf("starting %d workers for %d iterations of %d devices (%d connects)\n", workers, iterations, len(cwds), len(cwds)*iterations)
 	for i := 0; i < workers; i++ {
 		wg.Add(1)
 		go func() {

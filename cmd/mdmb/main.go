@@ -12,9 +12,6 @@ import (
 	"time"
 
 	"github.com/jessepeterson/mdmb/internal/device"
-	"github.com/jessepeterson/mdmb/internal/keychain"
-	"github.com/jessepeterson/mdmb/internal/mdmclient"
-	"github.com/jessepeterson/mdmb/internal/profiles"
 	bolt "go.etcd.io/bbolt"
 )
 
@@ -130,11 +127,11 @@ func devicesEnroll(name string, args []string, rctx RunContext, usage func()) {
 		fmt.Println(dev.UDID)
 
 		// create reference to this device's system keychain
-		kc := keychain.New(dev.UDID, keychain.KeychainSystem, rctx.DB)
+		kc := device.NewKeychain(dev.UDID, device.KeychainSystem, rctx.DB)
 
-		ps := profiles.New(dev.UDID, rctx.DB)
+		ps := device.NewProfileStore(dev.UDID, rctx.DB)
 
-		client, err := mdmclient.NewMDMClient(dev, kc, ps)
+		client, err := device.NewMDMClient(dev, kc, ps)
 		if err != nil {
 			log.Println(err)
 			continue
@@ -209,11 +206,11 @@ func devicesConnect(name string, args []string, rctx RunContext, usage func()) {
 		}
 
 		// create reference to this device's system keychain
-		kc := keychain.New(dev.UDID, keychain.KeychainSystem, rctx.DB)
+		kc := device.NewKeychain(dev.UDID, device.KeychainSystem, rctx.DB)
 
-		ps := profiles.New(dev.UDID, rctx.DB)
+		ps := device.NewProfileStore(dev.UDID, rctx.DB)
 
-		client, err := mdmclient.NewMDMClient(dev, kc, ps)
+		client, err := device.NewMDMClient(dev, kc, ps)
 		if err != nil {
 			log.Println(err)
 			continue
@@ -225,6 +222,5 @@ func devicesConnect(name string, args []string, rctx RunContext, usage func()) {
 		})
 	}
 
-	fmt.Printf("starting %d workers for %d iterations\n", *workers, *iterations)
 	startConnectWorkers(workerData, *workers, *iterations)
 }

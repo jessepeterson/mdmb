@@ -1,4 +1,4 @@
-package boltprim
+package device
 
 import (
 	"strconv"

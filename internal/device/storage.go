@@ -3,7 +3,6 @@ package device
 import (
 	"errors"
 
-	"github.com/jessepeterson/mdmb/internal/boltprim"
 	bolt "go.etcd.io/bbolt"
 )
 
@@ -17,19 +16,19 @@ func (device *Device) Save(db *bolt.DB) error {
 		return errors.New("invalid device")
 	}
 	return db.Update(func(tx *bolt.Tx) error {
-		err := boltprim.BucketPutOrDeleteString(tx, "device_serial", device.UDID, device.Serial)
+		err := BucketPutOrDeleteString(tx, "device_serial", device.UDID, device.Serial)
 		if err != nil {
 			return err
 		}
-		err = boltprim.BucketPutOrDeleteString(tx, "device_computer_name", device.UDID, device.ComputerName)
+		err = BucketPutOrDeleteString(tx, "device_computer_name", device.UDID, device.ComputerName)
 		if err != nil {
 			return err
 		}
-		err = boltprim.BucketPutOrDeleteString(tx, "device_mdm_identity_keychain_uuid", device.UDID, device.MDMIdentityKeychainUUID)
+		err = BucketPutOrDeleteString(tx, "device_mdm_identity_keychain_uuid", device.UDID, device.MDMIdentityKeychainUUID)
 		if err != nil {
 			return err
 		}
-		return boltprim.BucketPutOrDeleteString(tx, "device_mdm_profile_id", device.UDID, device.MDMProfileIdentifier)
+		return BucketPutOrDeleteString(tx, "device_mdm_profile_id", device.UDID, device.MDMProfileIdentifier)
 	})
 }
 
@@ -37,13 +36,13 @@ func (device *Device) Save(db *bolt.DB) error {
 func Load(udid string, db *bolt.DB) (device *Device, err error) {
 	device = &Device{UDID: udid}
 	err = db.View(func(tx *bolt.Tx) error {
-		device.Serial = boltprim.BucketGetString(tx, "device_serial", udid)
+		device.Serial = BucketGetString(tx, "device_serial", udid)
 		if device.Serial == "" {
 			return errors.New("device not found (serial not found)")
 		}
-		device.ComputerName = boltprim.BucketGetString(tx, "device_computer_name", udid)
-		device.MDMIdentityKeychainUUID = boltprim.BucketGetString(tx, "device_mdm_identity_keychain_uuid", udid)
-		device.MDMProfileIdentifier = boltprim.BucketGetString(tx, "device_mdm_profile_id", udid)
+		device.ComputerName = BucketGetString(tx, "device_computer_name", udid)
+		device.MDMIdentityKeychainUUID = BucketGetString(tx, "device_mdm_identity_keychain_uuid", udid)
+		device.MDMProfileIdentifier = BucketGetString(tx, "device_mdm_profile_id", udid)
 		return nil
 	})
 	return

@@ -1,4 +1,4 @@
-package mdmclient
+package device
 
 import (
 	"bytes"

@@ -1,4 +1,4 @@
-package profiles
+package device
 
 import (
 	"errors"
@@ -6,7 +6,6 @@ import (
 
 	"github.com/groob/plist"
 	"github.com/jessepeterson/cfgprofiles"
-	"github.com/jessepeterson/mdmb/internal/boltprim"
 	bolt "go.etcd.io/bbolt"
 )
 
@@ -16,7 +15,7 @@ type ProfileStore struct {
 	DB *bolt.DB
 }
 
-func New(id string, db *bolt.DB) *ProfileStore {
+func NewProfileStore(id string, db *bolt.DB) *ProfileStore {
 	return &ProfileStore{ID: id, DB: db}
 }
 
@@ -31,7 +30,7 @@ func (ps *ProfileStore) Install(pb []byte) error {
 	}
 	key := fmt.Sprintf("%s_%s", ps.ID, p.PayloadIdentifier)
 	return ps.DB.Update(func(tx *bolt.Tx) error {
-		return boltprim.BucketPutOrDelete(tx, "profiles", key, pb)
+		return BucketPutOrDelete(tx, "profiles", key, pb)
 	})
 }
 
@@ -39,7 +38,7 @@ func (ps *ProfileStore) Load(id string) (p *cfgprofiles.Profile, err error) {
 	pb := []byte{}
 	key := fmt.Sprintf("%s_%s", ps.ID, id)
 	err = ps.DB.View(func(tx *bolt.Tx) error {
-		pb = boltprim.BucketGet(tx, "profiles", key)
+		pb = BucketGet(tx, "profiles", key)
 		return nil
 	})
 	if err != nil {

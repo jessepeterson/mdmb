@@ -1,4 +1,4 @@
-package mdmclient
+package device
 
 import (
 	"context"
@@ -17,7 +17,6 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/jessepeterson/cfgprofiles"
-	"github.com/jessepeterson/mdmb/internal/device"
 	scepclient "github.com/micromdm/scep/client"
 	"github.com/micromdm/scep/crypto/x509util"
 	"github.com/micromdm/scep/scep"
@@ -82,7 +81,7 @@ func keyFromSCEPProfilePayload(pl *cfgprofiles.SCEPPayload, rand io.Reader) (*rs
 	return rsa.GenerateKey(rand, keySize)
 }
 
-func replaceSCEPVars(device *device.Device, istrs []string) (ostrs []string) {
+func replaceSCEPVars(device *Device, istrs []string) (ostrs []string) {
 	// % /usr/libexec/mdmclient dumpSCEPVars
 	r := strings.NewReplacer([]string{
 		"%ComputerName%", device.ComputerName,
@@ -98,7 +97,7 @@ func replaceSCEPVars(device *device.Device, istrs []string) (ostrs []string) {
 	return
 }
 
-func csrFromSCEPProfilePayload(pl *cfgprofiles.SCEPPayload, device *device.Device, rand io.Reader, privKey *rsa.PrivateKey) ([]byte, error) {
+func csrFromSCEPProfilePayload(pl *cfgprofiles.SCEPPayload, device *Device, rand io.Reader, privKey *rsa.PrivateKey) ([]byte, error) {
 	plc := pl.PayloadContent
 
 	tmpl := &x509util.CertificateRequest{

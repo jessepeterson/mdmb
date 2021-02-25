@@ -1,4 +1,4 @@
-package keychain
+package device
 
 import (
 	"crypto/rsa"

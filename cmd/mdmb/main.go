@@ -226,5 +226,5 @@ func devicesConnect(name string, args []string, rctx RunContext, usage func()) {
 	}
 
 	fmt.Printf("starting %d workers for %d iterations\n", *workers, *iterations)
-	PooledConnectWork(workerData, *workers, *iterations)
+	startConnectWorkers(workerData, *workers, *iterations)
 }

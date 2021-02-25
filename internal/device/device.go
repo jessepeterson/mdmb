@@ -21,6 +21,7 @@ type Device struct {
 
 	sysKeychain     *Keychain
 	sysProfileStore *ProfileStore
+	mdmClient       *MDMClient
 }
 
 // New creates a new device with a random serial number and UDID

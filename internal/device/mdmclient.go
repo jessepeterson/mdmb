@@ -156,3 +156,11 @@ func (c *MDMClient) loadOrDeleteMDMIdentity(uuid string, delete bool) (*rsa.Priv
 
 	return kciKey.Key, kciCert.Certificate, nil
 }
+
+func (device *Device) MDMClient() (*MDMClient, error) {
+	var err error
+	if device.mdmClient == nil {
+		device.mdmClient, err = NewMDMClient(device)
+	}
+	return device.mdmClient, err
+}

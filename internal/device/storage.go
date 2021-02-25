@@ -11,11 +11,11 @@ func (device *Device) validDevice() bool {
 }
 
 // Save device to bolt DB storage
-func (device *Device) Save(db *bolt.DB) error {
+func (device *Device) Save() error {
 	if !device.validDevice() {
 		return errors.New("invalid device")
 	}
-	return db.Update(func(tx *bolt.Tx) error {
+	return device.boltDB.Update(func(tx *bolt.Tx) error {
 		err := BucketPutOrDeleteString(tx, "device_serial", device.UDID, device.Serial)
 		if err != nil {
 			return err
@@ -34,7 +34,7 @@ func (device *Device) Save(db *bolt.DB) error {
 
 // Load a device from bolt DB storage
 func Load(udid string, db *bolt.DB) (device *Device, err error) {
-	device = &Device{UDID: udid}
+	device = &Device{UDID: udid, boltDB: db}
 	err = db.View(func(tx *bolt.Tx) error {
 		device.Serial = BucketGetString(tx, "device_serial", udid)
 		if device.Serial == "" {

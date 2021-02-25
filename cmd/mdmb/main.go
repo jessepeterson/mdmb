@@ -126,12 +126,9 @@ func devicesEnroll(name string, args []string, rctx RunContext, usage func()) {
 
 		fmt.Println(dev.UDID)
 
-		// create reference to this device's system keychain
-		kc := device.NewKeychain(dev.UDID, device.KeychainSystem, rctx.DB)
-
 		ps := device.NewProfileStore(dev.UDID, rctx.DB)
 
-		client, err := device.NewMDMClient(dev, kc, ps)
+		client, err := device.NewMDMClient(dev, ps)
 		if err != nil {
 			log.Println(err)
 			continue
@@ -143,7 +140,7 @@ func devicesEnroll(name string, args []string, rctx RunContext, usage func()) {
 			continue
 		}
 
-		err = dev.Save(rctx.DB)
+		err = dev.Save()
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -171,8 +168,8 @@ func devicesCreate(name string, args []string, rctx RunContext, usage func()) {
 
 	fmt.Println(*number)
 	for i := 0; i < *number; i++ {
-		d := device.New("")
-		err := d.Save(rctx.DB)
+		d := device.New("", rctx.DB)
+		err := d.Save()
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -205,12 +202,9 @@ func devicesConnect(name string, args []string, rctx RunContext, usage func()) {
 			continue
 		}
 
-		// create reference to this device's system keychain
-		kc := device.NewKeychain(dev.UDID, device.KeychainSystem, rctx.DB)
-
 		ps := device.NewProfileStore(dev.UDID, rctx.DB)
 
-		client, err := device.NewMDMClient(dev, kc, ps)
+		client, err := device.NewMDMClient(dev, ps)
 		if err != nil {
 			log.Println(err)
 			continue

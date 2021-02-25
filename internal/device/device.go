@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	bolt "go.etcd.io/bbolt"
 )
 
 // Device represents a pseudo Apple device for MDM interactions
@@ -15,14 +16,19 @@ type Device struct {
 
 	MDMIdentityKeychainUUID string
 	MDMProfileIdentifier    string
+
+	boltDB *bolt.DB
+
+	sysKeychain *Keychain
 }
 
 // New creates a new device with a random serial number and UDID
-func New(name string) *Device {
+func New(name string, db *bolt.DB) *Device {
 	device := &Device{
 		ComputerName: name,
 		Serial:       randSerial(),
 		UDID:         strings.ToUpper(uuid.NewString()),
+		boltDB:       db,
 	}
 	if name == "" {
 		device.ComputerName = device.Serial + "'s Computer"

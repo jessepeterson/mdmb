@@ -19,7 +19,8 @@ type Device struct {
 
 	boltDB *bolt.DB
 
-	sysKeychain *Keychain
+	sysKeychain     *Keychain
+	sysProfileStore *ProfileStore
 }
 
 // New creates a new device with a random serial number and UDID

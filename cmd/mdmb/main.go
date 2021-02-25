@@ -126,9 +126,7 @@ func devicesEnroll(name string, args []string, rctx RunContext, usage func()) {
 
 		fmt.Println(dev.UDID)
 
-		ps := device.NewProfileStore(dev.UDID, rctx.DB)
-
-		client, err := device.NewMDMClient(dev, ps)
+		client, err := device.NewMDMClient(dev)
 		if err != nil {
 			log.Println(err)
 			continue
@@ -202,9 +200,7 @@ func devicesConnect(name string, args []string, rctx RunContext, usage func()) {
 			continue
 		}
 
-		ps := device.NewProfileStore(dev.UDID, rctx.DB)
-
-		client, err := device.NewMDMClient(dev, ps)
+		client, err := device.NewMDMClient(dev)
 		if err != nil {
 			log.Println(err)
 			continue

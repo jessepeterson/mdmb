@@ -11,18 +11,16 @@ import (
 )
 
 type MDMClient struct {
-	Device       *Device
-	ProfileStore *ProfileStore
-	MDMPayload   *cfgprofiles.MDMPayload
+	Device     *Device
+	MDMPayload *cfgprofiles.MDMPayload
 
 	IdentityCertificate *x509.Certificate
 	IdentityPrivateKey  *rsa.PrivateKey
 }
 
-func NewMDMClient(device *Device, ps *ProfileStore) (*MDMClient, error) {
+func NewMDMClient(device *Device) (*MDMClient, error) {
 	c := &MDMClient{
-		Device:       device,
-		ProfileStore: ps,
+		Device: device,
 	}
 	if device.MDMIdentityKeychainUUID != "" {
 		var err error
@@ -32,7 +30,7 @@ func NewMDMClient(device *Device, ps *ProfileStore) (*MDMClient, error) {
 		}
 	}
 	if device.MDMProfileIdentifier != "" {
-		profile, err := ps.Load(device.MDMProfileIdentifier)
+		profile, err := device.SystemProfileStore().Load(device.MDMProfileIdentifier)
 		if err != nil {
 			return c, err
 		}
@@ -102,7 +100,7 @@ func (c *MDMClient) Enroll(ep []byte, rand io.Reader) error {
 	}
 
 	c.Device.MDMProfileIdentifier = profile.PayloadIdentifier
-	c.ProfileStore.Install(ep)
+	c.Device.SystemProfileStore().Install(ep)
 
 	return nil
 }

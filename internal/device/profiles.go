@@ -48,3 +48,10 @@ func (ps *ProfileStore) Load(id string) (p *cfgprofiles.Profile, err error) {
 	err = plist.Unmarshal(pb, p)
 	return
 }
+
+func (device *Device) SystemProfileStore() *ProfileStore {
+	if device.sysProfileStore == nil {
+		device.sysProfileStore = NewProfileStore(device.UDID, device.boltDB)
+	}
+	return device.sysProfileStore
+}

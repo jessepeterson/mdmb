@@ -36,6 +36,16 @@ func (ps *ProfileStore) Install(pb []byte) error {
 	})
 }
 
+func (ps *ProfileStore) persistProfile(pb []byte, profileID string) error {
+	if len(pb) == 0 {
+		return errors.New("empty profile")
+	}
+	key := fmt.Sprintf("%s_%s", ps.ID, profileID)
+	return ps.DB.Update(func(tx *bolt.Tx) error {
+		return BucketPutOrDelete(tx, "profiles", key, pb)
+	})
+}
+
 func (ps *ProfileStore) Load(id string) (p *cfgprofiles.Profile, err error) {
 	pb := []byte{}
 	key := fmt.Sprintf("%s_%s", ps.ID, id)
@@ -63,19 +73,38 @@ const (
 	PayloadRequiresIdentities
 )
 
-type PayloadAndResult struct {
+type payloadAndResult struct {
 	CommonPayload        *cfgprofiles.Payload
 	PayloadRequiresFlags int
 	Payload              interface{}
-	StringResult         string
-	// PayloadAndResultRef  *PayloadAndResult
+
+	// not pretty...
+	StringResult        string
+	payloadAndResultRef *payloadAndResult
 }
 
-func findPayloadAndResultByUUID(plds []*PayloadAndResult, uuid string) *PayloadAndResult {
+func findpayloadAndResultByUUID(plds []*payloadAndResult, uuid string) *payloadAndResult {
 	for _, v := range plds {
 		if v.CommonPayload != nil && v.CommonPayload.PayloadUUID == uuid {
 			return v
 		}
+	}
+	return nil
+}
+
+// func (device *Device) RemoveProfile(profileID string) error {
+// 	return nil
+// }
+
+func (device *Device) ValidateProfileInstall(p *cfgprofiles.Profile) error {
+	mdmPlds := p.MDMPayloads()
+	if len(mdmPlds) >= 1 {
+		if len(mdmPlds) > 1 {
+			return errors.New("Profile may only contain one MDM payload")
+		}
+		// if device.MDMProfileIdentifier != "" {
+		// 	return errors.New("device already enrolled, please unenroll first")
+		// }
 	}
 	return nil
 }
@@ -89,42 +118,34 @@ func (device *Device) InstallProfile(pb []byte) error {
 	if err != nil {
 		return err
 	}
+	err = device.ValidateProfileInstall(p)
+	if err != nil {
+		return err
+	}
 
 	// create metadata structures around profile payloads
-	orderedPayloads := make([]*PayloadAndResult, len(p.PayloadContent))
+	orderedPayloads := make([]*payloadAndResult, len(p.PayloadContent))
 	for i, plc := range p.PayloadContent {
 		switch pl := plc.Payload.(type) {
 		case *cfgprofiles.SCEPPayload:
-			orderedPayloads[i] = &PayloadAndResult{
+			orderedPayloads[i] = &payloadAndResult{
 				CommonPayload:        &pl.Payload,
 				Payload:              pl,
 				PayloadRequiresFlags: PayloadRequiresNetwork,
 			}
 		case *cfgprofiles.MDMPayload:
-			orderedPayloads[i] = &PayloadAndResult{
+			orderedPayloads[i] = &payloadAndResult{
 				CommonPayload:        &pl.Payload,
 				Payload:              pl,
 				PayloadRequiresFlags: PayloadRequiresNetwork | PayloadRequiresIdentities,
 			}
 		default:
-			orderedPayloads[i] = &PayloadAndResult{
+			orderedPayloads[i] = &payloadAndResult{
 				CommonPayload: cfgprofiles.CommonPayload(pl),
 				Payload:       pl,
 			}
 		}
 	}
-
-	// // find & associate payload references
-	// for _, pr := range orderedPayloads {
-	// 	switch pl := pr.Payload.(type) {
-	// 	case *cfgprofiles.MDMPayload:
-	// 		pr.PayloadAndResultRef = findPayloadAndResultByUUID(orderedPayloads, pl.IdentityCertificateUUID)
-	// 		if pr.PayloadAndResultRef == nil {
-	// 			return fmt.Errorf("could not find payload UUID %s", pl.IdentityCertificateUUID)
-	// 		}
-	// 	}
-	// 	// case *cfgprofiles.WiFi:
-	// }
 
 	// sort the profiles into installation order
 	sort.SliceStable(orderedPayloads, func(i, j int) bool {
@@ -132,6 +153,7 @@ func (device *Device) InstallProfile(pb []byte) error {
 	})
 
 	// process and install payloads
+	// TODO: to process profile roll-backs/uninstalls
 	for _, pr := range orderedPayloads {
 		switch pl := pr.Payload.(type) {
 		case *cfgprofiles.SCEPPayload:
@@ -142,11 +164,40 @@ func (device *Device) InstallProfile(pb []byte) error {
 			if pr.StringResult == "" {
 				return errors.New("no result from scep payload install")
 			}
+		case *cfgprofiles.MDMPayload:
+			pr.payloadAndResultRef = findpayloadAndResultByUUID(orderedPayloads, pl.IdentityCertificateUUID)
+			if pr.payloadAndResultRef == nil {
+				return fmt.Errorf("could not find payload UUID %s", pl.IdentityCertificateUUID)
+			}
+
+			device.MDMIdentityKeychainUUID = pr.payloadAndResultRef.StringResult
+			if device.MDMIdentityKeychainUUID == "" {
+				return errors.New("referenced identity payload has no result keychain ID")
+			}
+			device.Save()
+
+			err = device.installMDMPayload(pl, p.PayloadIdentifier)
+			if err != nil {
+				return err
+			}
 		default:
 			fmt.Printf("unknown payload type %s uuid %s not processed\n", pr.CommonPayload.PayloadType, pr.CommonPayload.PayloadUUID)
 		}
 	}
 
+	return device.SystemProfileStore().persistProfile(pb, p.PayloadIdentifier)
+}
+
+func (device *Device) installMDMPayload(mdmPayload *cfgprofiles.MDMPayload, profileID string) error {
+	c, err := NewMDMClient2(device, mdmPayload)
+	if err != nil {
+		return err
+	}
+	err = c.enroll2(profileID)
+	if err != nil {
+		return err
+	}
+	device.Save()
 	return nil
 }
 

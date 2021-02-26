@@ -18,6 +18,74 @@ type MDMClient struct {
 	IdentityPrivateKey  *rsa.PrivateKey
 }
 
+func NewMDMClient2(device *Device, mdmPld *cfgprofiles.MDMPayload) (*MDMClient, error) {
+	c := &MDMClient{Device: device, MDMPayload: mdmPld}
+	err := c.loadIdentityFromKeychain(device.MDMIdentityKeychainUUID)
+	return c, err
+}
+
+func (c *MDMClient) loadIdentityFromKeychain(uuid string) error {
+	if uuid == "" {
+		return errors.New("invalid keychain UUID")
+	}
+	kciID, err := LoadKeychainItem(c.Device.SystemKeychain(), uuid)
+	if err != nil {
+		return err
+	}
+
+	kciKey, err := LoadKeychainItem(c.Device.SystemKeychain(), kciID.IdentityKeyUUID)
+	if err != nil {
+		return err
+	}
+
+	kciCert, err := LoadKeychainItem(c.Device.SystemKeychain(), kciID.IdentityCertificateUUID)
+	if err != nil {
+		return err
+	}
+
+	c.IdentityPrivateKey = kciKey.Key
+	c.IdentityCertificate = kciCert.Certificate
+	return nil
+}
+
+func (c *MDMClient) loadMDMPayload(profileID string) error {
+	if c.Device.MDMProfileIdentifier == "" {
+		return errors.New("no MDM profile installed on device")
+	}
+	profile, err := c.Device.SystemProfileStore().Load(profileID)
+	if err != nil {
+		return err
+	}
+	mdmPlds := profile.MDMPayloads()
+	if len(mdmPlds) != 1 {
+		return errors.New("enrollment profile must contain one MDM payload")
+	}
+	c.MDMPayload = mdmPlds[0]
+	return nil
+}
+
+func (c *MDMClient) enroll2(profileID string) error {
+	if c.MDMPayload == nil {
+		return errors.New("no MDM payload")
+	}
+	if !c.MDMPayload.SignMessage {
+		return errors.New("non-SignMessage (mTLS) enrollment not supported")
+	}
+
+	err := c.authenticate()
+	if err != nil {
+		return err
+	}
+
+	err = c.tokenUpdate()
+	if err != nil {
+		return err
+	}
+
+	c.Device.MDMProfileIdentifier = profileID
+	return nil
+}
+
 func NewMDMClient(device *Device) (*MDMClient, error) {
 	c := &MDMClient{
 		Device: device,

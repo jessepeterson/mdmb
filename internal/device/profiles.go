@@ -1,8 +1,10 @@
 package device
 
 import (
+	"crypto/rand"
 	"errors"
 	"fmt"
+	"sort"
 
 	"github.com/groob/plist"
 	"github.com/jessepeterson/cfgprofiles"
@@ -54,4 +56,138 @@ func (device *Device) SystemProfileStore() *ProfileStore {
 		device.sysProfileStore = NewProfileStore(device.UDID, device.boltDB)
 	}
 	return device.sysProfileStore
+}
+
+const (
+	PayloadRequiresNetwork = 1 << iota
+	PayloadRequiresIdentities
+)
+
+type PayloadAndResult struct {
+	CommonPayload        *cfgprofiles.Payload
+	PayloadRequiresFlags int
+	Payload              interface{}
+	StringResult         string
+	// PayloadAndResultRef  *PayloadAndResult
+}
+
+func findPayloadAndResultByUUID(plds []*PayloadAndResult, uuid string) *PayloadAndResult {
+	for _, v := range plds {
+		if v.CommonPayload != nil && v.CommonPayload.PayloadUUID == uuid {
+			return v
+		}
+	}
+	return nil
+}
+
+func (device *Device) InstallProfile(pb []byte) error {
+	if len(pb) == 0 {
+		return errors.New("empty profile")
+	}
+	p := &cfgprofiles.Profile{}
+	err := plist.Unmarshal(pb, p)
+	if err != nil {
+		return err
+	}
+
+	// create metadata structures around profile payloads
+	orderedPayloads := make([]*PayloadAndResult, len(p.PayloadContent))
+	for i, plc := range p.PayloadContent {
+		switch pl := plc.Payload.(type) {
+		case *cfgprofiles.SCEPPayload:
+			orderedPayloads[i] = &PayloadAndResult{
+				CommonPayload:        &pl.Payload,
+				Payload:              pl,
+				PayloadRequiresFlags: PayloadRequiresNetwork,
+			}
+		case *cfgprofiles.MDMPayload:
+			orderedPayloads[i] = &PayloadAndResult{
+				CommonPayload:        &pl.Payload,
+				Payload:              pl,
+				PayloadRequiresFlags: PayloadRequiresNetwork | PayloadRequiresIdentities,
+			}
+		default:
+			orderedPayloads[i] = &PayloadAndResult{
+				CommonPayload: cfgprofiles.CommonPayload(pl),
+				Payload:       pl,
+			}
+		}
+	}
+
+	// // find & associate payload references
+	// for _, pr := range orderedPayloads {
+	// 	switch pl := pr.Payload.(type) {
+	// 	case *cfgprofiles.MDMPayload:
+	// 		pr.PayloadAndResultRef = findPayloadAndResultByUUID(orderedPayloads, pl.IdentityCertificateUUID)
+	// 		if pr.PayloadAndResultRef == nil {
+	// 			return fmt.Errorf("could not find payload UUID %s", pl.IdentityCertificateUUID)
+	// 		}
+	// 	}
+	// 	// case *cfgprofiles.WiFi:
+	// }
+
+	// sort the profiles into installation order
+	sort.SliceStable(orderedPayloads, func(i, j int) bool {
+		return orderedPayloads[i].PayloadRequiresFlags < orderedPayloads[j].PayloadRequiresFlags
+	})
+
+	// process and install payloads
+	for _, pr := range orderedPayloads {
+		switch pl := pr.Payload.(type) {
+		case *cfgprofiles.SCEPPayload:
+			pr.StringResult, err = device.installSCEPPayload(pl)
+			if err != nil {
+				return err
+			}
+			if pr.StringResult == "" {
+				return errors.New("no result from scep payload install")
+			}
+		default:
+			fmt.Printf("unknown payload type %s uuid %s not processed\n", pr.CommonPayload.PayloadType, pr.CommonPayload.PayloadUUID)
+		}
+	}
+
+	return nil
+}
+
+// installSCEPPayload ... and returns the keychain identity UUID
+func (device *Device) installSCEPPayload(scepPayload *cfgprofiles.SCEPPayload) (string, error) {
+	key, err := keyFromSCEPProfilePayload(scepPayload, rand.Reader)
+	if err != nil {
+		return "", err
+	}
+
+	csrBytes, err := csrFromSCEPProfilePayload(scepPayload, device, rand.Reader, key)
+	if err != nil {
+		return "", err
+	}
+
+	cert, err := scepNewPKCSReq(csrBytes, scepPayload.PayloadContent.URL, scepPayload.PayloadContent.Challenge)
+	if err != nil {
+		return "", err
+	}
+
+	kciKey := NewKeychainItem(device.SystemKeychain(), ClassKey)
+	kciKey.Key = key
+	err = kciKey.Save()
+	if err != nil {
+		return "", err
+	}
+
+	kciCert := NewKeychainItem(device.SystemKeychain(), ClassCertificate)
+	kciCert.Certificate = cert
+	err = kciCert.Save()
+	if err != nil {
+		return "", err
+	}
+
+	kciID := NewKeychainItem(device.SystemKeychain(), ClassIdentity)
+	kciID.IdentityKeyUUID = kciKey.UUID
+	kciID.IdentityCertificateUUID = kciCert.UUID
+	err = kciID.Save()
+	if err != nil {
+		return "", err
+	}
+
+	return kciID.UUID, nil
 }

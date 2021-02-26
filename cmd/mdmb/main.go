@@ -1,7 +1,6 @@
 package main
 
 import (
-	"crypto/rand"
 	"flag"
 	"fmt"
 	"io/ioutil"
@@ -126,13 +125,7 @@ func devicesEnroll(name string, args []string, rctx RunContext, usage func()) {
 
 		fmt.Println(dev.UDID)
 
-		client, err := dev.MDMClient()
-		if err != nil {
-			log.Println(err)
-			continue
-		}
-
-		err = client.Enroll(ep, rand.Reader)
+		err = dev.InstallProfile(ep)
 		if err != nil {
 			log.Println(err)
 			continue

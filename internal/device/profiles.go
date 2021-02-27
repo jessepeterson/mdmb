@@ -30,20 +30,7 @@ func (ps *ProfileStore) Install(pb []byte) error {
 	if err != nil {
 		return err
 	}
-	key := fmt.Sprintf("%s_%s", ps.ID, p.PayloadIdentifier)
-	return ps.DB.Update(func(tx *bolt.Tx) error {
-		return BucketPutOrDelete(tx, "profiles", key, pb)
-	})
-}
-
-func (ps *ProfileStore) persistProfile(pb []byte, profileID string) error {
-	if len(pb) == 0 {
-		return errors.New("empty profile")
-	}
-	key := fmt.Sprintf("%s_%s", ps.ID, profileID)
-	return ps.DB.Update(func(tx *bolt.Tx) error {
-		return BucketPutOrDelete(tx, "profiles", key, pb)
-	})
+	return ps.persistProfile(pb, p.PayloadIdentifier)
 }
 
 func (ps *ProfileStore) Load(id string) (p *cfgprofiles.Profile, err error) {
@@ -58,6 +45,32 @@ func (ps *ProfileStore) Load(id string) (p *cfgprofiles.Profile, err error) {
 	}
 	p = &cfgprofiles.Profile{}
 	err = plist.Unmarshal(pb, p)
+	return
+}
+
+func (ps *ProfileStore) persistProfile(pb []byte, profileID string) error {
+	if len(pb) == 0 {
+		return errors.New("empty profile")
+	}
+	key := fmt.Sprintf("%s_%s", ps.ID, profileID)
+	return ps.DB.Update(func(tx *bolt.Tx) error {
+		return BucketPutOrDelete(tx, "profiles", key, pb)
+	})
+}
+
+func (ps *ProfileStore) savePayloadRefString(profileID string, pld *cfgprofiles.Payload, ekey, value string) error {
+	return ps.DB.Update(func(tx *bolt.Tx) error {
+		key := fmt.Sprintf("%s_%s_%s_%s", profileID, pld.PayloadIdentifier, pld.PayloadUUID, ekey)
+		return BucketPutOrDeleteString(tx, "profile_payload_refs", key, value)
+	})
+}
+
+func (ps *ProfileStore) loadPayloadRefString(profileID string, pld *cfgprofiles.Payload, ekey string) (s string, err error) {
+	err = ps.DB.View(func(tx *bolt.Tx) error {
+		key := fmt.Sprintf("%s_%s_%s_%s", profileID, pld.PayloadIdentifier, pld.PayloadUUID, ekey)
+		s = BucketGetString(tx, "profile_payload_refs", key)
+		return nil
+	})
 	return
 }
 
@@ -157,7 +170,7 @@ func (device *Device) InstallProfile(pb []byte) error {
 	for _, pr := range orderedPayloads {
 		switch pl := pr.Payload.(type) {
 		case *cfgprofiles.SCEPPayload:
-			pr.StringResult, err = device.installSCEPPayload(pl)
+			pr.StringResult, err = device.installSCEPPayload(p.PayloadIdentifier, pl)
 			if err != nil {
 				return err
 			}
@@ -202,7 +215,7 @@ func (device *Device) installMDMPayload(mdmPayload *cfgprofiles.MDMPayload, prof
 }
 
 // installSCEPPayload ... and returns the keychain identity UUID
-func (device *Device) installSCEPPayload(scepPayload *cfgprofiles.SCEPPayload) (string, error) {
+func (device *Device) installSCEPPayload(profileID string, scepPayload *cfgprofiles.SCEPPayload) (string, error) {
 	key, err := keyFromSCEPProfilePayload(scepPayload, rand.Reader)
 	if err != nil {
 		return "", err
@@ -236,6 +249,11 @@ func (device *Device) installSCEPPayload(scepPayload *cfgprofiles.SCEPPayload) (
 	kciID.IdentityKeyUUID = kciKey.UUID
 	kciID.IdentityCertificateUUID = kciCert.UUID
 	err = kciID.Save()
+	if err != nil {
+		return "", err
+	}
+
+	err = device.SystemProfileStore().savePayloadRefString(profileID, &scepPayload.Payload, "keychain_identity", kciKey.UUID)
 	if err != nil {
 		return "", err
 	}

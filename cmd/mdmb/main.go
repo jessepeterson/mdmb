@@ -7,6 +7,7 @@ import (
 	"log"
 	mathrand "math/rand"
 	"os"
+	"strings"
 	"text/tabwriter"
 	"time"
 
@@ -36,8 +37,9 @@ func main() {
 		{"help", "Display usage help", help},
 		{"devices-list", "list created devices", devicesList},
 		{"devices-create", "create new devices", devicesCreate},
-		{"devices-enroll", "enroll devices into MDM", devicesEnroll},
 		{"devices-connect", "devices connect to MDM", devicesConnect},
+		{"devices-profiles-list", "list device profiles", devicesProfilesList},
+		{"devices-profiles-install", "install profiles onto device (i.e. enroll)", devicesProfilesInstall},
 	}
 	f := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
 	var (
@@ -92,10 +94,10 @@ func setSubCommandFlagSetUsage(f *flag.FlagSet, usage func()) {
 	}
 }
 
-func devicesEnroll(name string, args []string, rctx RunContext, usage func()) {
+func devicesProfilesInstall(name string, args []string, rctx RunContext, usage func()) {
 	f := flag.NewFlagSet(name, flag.ExitOnError)
 	var (
-		file = f.String("file", "", "file of enrollment spec (e.g. profile)")
+		file = f.String("f", "", "profile to install")
 	)
 	setSubCommandFlagSetUsage(f, usage)
 	f.Parse(args)
@@ -117,23 +119,17 @@ func devicesEnroll(name string, args []string, rctx RunContext, usage func()) {
 	}
 
 	for _, u := range udids {
+		fmt.Println(u)
 		dev, err := device.Load(u, rctx.DB)
 		if err != nil {
 			log.Println(err)
 			continue
 		}
 
-		fmt.Println(dev.UDID)
-
 		err = dev.InstallProfile(ep)
 		if err != nil {
 			log.Println(err)
 			continue
-		}
-
-		err = dev.Save()
-		if err != nil {
-			log.Fatal(err)
 		}
 	}
 }
@@ -206,4 +202,27 @@ func devicesConnect(name string, args []string, rctx RunContext, usage func()) {
 	}
 
 	startConnectWorkers(workerData, *workers, *iterations)
+}
+
+func devicesProfilesList(name string, args []string, rctx RunContext, usage func()) {
+	udids, err := device.List(rctx.DB)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	for _, u := range udids {
+		fmt.Printf("profiles for UUID: %s\n", u)
+		dev, err := device.Load(u, rctx.DB)
+		if err != nil {
+			log.Println(err)
+			continue
+		}
+
+		profileUUIDs, err := dev.SystemProfileStore().ListUUIDs()
+		if err != nil {
+			log.Println(err)
+			continue
+		}
+		fmt.Print(strings.Join(profileUUIDs, "\n"), "\n")
+	}
 }

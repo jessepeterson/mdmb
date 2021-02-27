@@ -74,6 +74,14 @@ func (ps *ProfileStore) loadPayloadRefString(profileID string, pld *cfgprofiles.
 	return
 }
 
+func (ps *ProfileStore) ListUUIDs() (uuids []string, err error) {
+	err = ps.DB.View(func(tx *bolt.Tx) error {
+		uuids = BucketGetKeysWithPrefix(tx, "profiles", ps.ID+"_", true)
+		return nil
+	})
+	return
+}
+
 func (device *Device) SystemProfileStore() *ProfileStore {
 	if device.sysProfileStore == nil {
 		device.sysProfileStore = NewProfileStore(device.UDID, device.boltDB)

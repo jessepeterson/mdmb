@@ -1,6 +1,7 @@
 package device
 
 import (
+	"bytes"
 	"strconv"
 
 	bolt "go.etcd.io/bbolt"
@@ -51,4 +52,22 @@ func BucketGetInt(tx *bolt.Tx, bucket, key string) int {
 	i, _ := strconv.Atoi(string(BucketGet(tx, bucket, key)))
 	return i
 
+}
+
+// BucketGetKeysWithPrefix retrieves a list of keys with a prefix in a bucket
+func BucketGetKeysWithPrefix(tx *bolt.Tx, bucket string, prefix string, stripPrefix bool) []string {
+	b := tx.Bucket([]byte(bucket))
+	if b == nil {
+		return nil
+	}
+	c := b.Cursor()
+	var results []string
+	prefixBytes := []byte(prefix)
+	for k, _ := c.Seek(prefixBytes); k != nil && bytes.HasPrefix(k, prefixBytes); k, _ = c.Next() {
+		if stripPrefix {
+			k = k[len(prefix):]
+		}
+		results = append(results, string(k))
+	}
+	return results
 }

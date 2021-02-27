@@ -202,11 +202,11 @@ func (device *Device) InstallProfile(pb []byte) error {
 }
 
 func (device *Device) installMDMPayload(mdmPayload *cfgprofiles.MDMPayload, profileID string) error {
-	c, err := NewMDMClient2(device, mdmPayload)
+	c, err := newMDMClientUsingPayload(device, mdmPayload)
 	if err != nil {
 		return err
 	}
-	err = c.enroll2(profileID)
+	err = c.enroll(profileID)
 	if err != nil {
 		return err
 	}

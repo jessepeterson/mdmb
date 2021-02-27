@@ -97,6 +97,16 @@ func (c *MDMClient) enroll(profileID string) error {
 	return nil
 }
 
+func (c *MDMClient) unenroll() error {
+	// c.CheckIn/device removal?
+	c.IdentityPrivateKey = nil
+	c.IdentityCertificate = nil
+	c.MDMPayload = nil
+	c.Device.MDMProfileIdentifier = ""
+	c.Device.MDMIdentityKeychainUUID = ""
+	return nil
+}
+
 func (device *Device) MDMClient() (*MDMClient, error) {
 	var err error
 	if device.mdmClient == nil {

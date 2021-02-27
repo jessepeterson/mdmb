@@ -21,18 +21,6 @@ func NewProfileStore(id string, db *bolt.DB) *ProfileStore {
 	return &ProfileStore{ID: id, DB: db}
 }
 
-func (ps *ProfileStore) Install(pb []byte) error {
-	if len(pb) == 0 {
-		return errors.New("empty profile")
-	}
-	p := &cfgprofiles.Profile{}
-	err := plist.Unmarshal(pb, p)
-	if err != nil {
-		return err
-	}
-	return ps.persistProfile(pb, p.PayloadIdentifier)
-}
-
 func (ps *ProfileStore) Load(id string) (p *cfgprofiles.Profile, err error) {
 	pb := []byte{}
 	key := fmt.Sprintf("%s_%s", ps.ID, id)
@@ -42,6 +30,9 @@ func (ps *ProfileStore) Load(id string) (p *cfgprofiles.Profile, err error) {
 	})
 	if err != nil {
 		return
+	}
+	if len(pb) == 0 {
+		return nil, fmt.Errorf("missing or zero-length profile: %s", id)
 	}
 	p = &cfgprofiles.Profile{}
 	err = plist.Unmarshal(pb, p)
@@ -55,6 +46,13 @@ func (ps *ProfileStore) persistProfile(pb []byte, profileID string) error {
 	key := fmt.Sprintf("%s_%s", ps.ID, profileID)
 	return ps.DB.Update(func(tx *bolt.Tx) error {
 		return BucketPutOrDelete(tx, "profiles", key, pb)
+	})
+}
+
+func (ps *ProfileStore) removeProfile(profileID string) error {
+	key := fmt.Sprintf("%s_%s", ps.ID, profileID)
+	return ps.DB.Update(func(tx *bolt.Tx) error {
+		return BucketPutOrDelete(tx, "profiles", key, nil)
 	})
 }
 
@@ -113,38 +111,20 @@ func findpayloadAndResultByUUID(plds []*payloadAndResult, uuid string) *payloadA
 	return nil
 }
 
-// func (device *Device) RemoveProfile(profileID string) error {
-// 	return nil
-// }
-
 func (device *Device) ValidateProfileInstall(p *cfgprofiles.Profile) error {
 	mdmPlds := p.MDMPayloads()
 	if len(mdmPlds) >= 1 {
 		if len(mdmPlds) > 1 {
 			return errors.New("Profile may only contain one MDM payload")
 		}
-		// if device.MDMProfileIdentifier != "" {
-		// 	return errors.New("device already enrolled, please unenroll first")
-		// }
+		if device.MDMProfileIdentifier != "" {
+			return errors.New("device already enrolled, please unenroll first")
+		}
 	}
 	return nil
 }
 
-func (device *Device) InstallProfile(pb []byte) error {
-	if len(pb) == 0 {
-		return errors.New("empty profile")
-	}
-	p := &cfgprofiles.Profile{}
-	err := plist.Unmarshal(pb, p)
-	if err != nil {
-		return err
-	}
-	err = device.ValidateProfileInstall(p)
-	if err != nil {
-		return err
-	}
-
-	// create metadata structures around profile payloads
+func classifyAndSortProfilePayloads(p *cfgprofiles.Profile, ascending bool) []*payloadAndResult {
 	orderedPayloads := make([]*payloadAndResult, len(p.PayloadContent))
 	for i, plc := range p.PayloadContent {
 		switch pl := plc.Payload.(type) {
@@ -170,8 +150,31 @@ func (device *Device) InstallProfile(pb []byte) error {
 
 	// sort the profiles into installation order
 	sort.SliceStable(orderedPayloads, func(i, j int) bool {
-		return orderedPayloads[i].PayloadRequiresFlags < orderedPayloads[j].PayloadRequiresFlags
+		if ascending {
+			return orderedPayloads[i].PayloadRequiresFlags > orderedPayloads[j].PayloadRequiresFlags
+		} else {
+			return orderedPayloads[i].PayloadRequiresFlags < orderedPayloads[j].PayloadRequiresFlags
+		}
 	})
+
+	return orderedPayloads
+}
+
+func (device *Device) InstallProfile(pb []byte) error {
+	if len(pb) == 0 {
+		return errors.New("empty profile")
+	}
+	p := &cfgprofiles.Profile{}
+	err := plist.Unmarshal(pb, p)
+	if err != nil {
+		return err
+	}
+	err = device.ValidateProfileInstall(p)
+	if err != nil {
+		return err
+	}
+
+	orderedPayloads := classifyAndSortProfilePayloads(p, false)
 
 	// process and install payloads
 	// TODO: to process profile roll-backs/uninstalls
@@ -191,10 +194,10 @@ func (device *Device) InstallProfile(pb []byte) error {
 				return fmt.Errorf("could not find payload UUID %s", pl.IdentityCertificateUUID)
 			}
 
-			device.MDMIdentityKeychainUUID = pr.payloadAndResultRef.StringResult
-			if device.MDMIdentityKeychainUUID == "" {
+			if pr.payloadAndResultRef.StringResult == "" {
 				return errors.New("referenced identity payload has no result keychain ID")
 			}
+			device.MDMIdentityKeychainUUID = pr.payloadAndResultRef.StringResult
 			device.Save()
 
 			err = device.installMDMPayload(pl, p.PayloadIdentifier)
@@ -218,6 +221,7 @@ func (device *Device) installMDMPayload(mdmPayload *cfgprofiles.MDMPayload, prof
 	if err != nil {
 		return err
 	}
+
 	device.Save()
 	return nil
 }
@@ -267,4 +271,40 @@ func (device *Device) installSCEPPayload(profileID string, scepPayload *cfgprofi
 	}
 
 	return kciID.UUID, nil
+}
+
+func (device *Device) RemoveProfile(profileID string) error {
+	p, err := device.SystemProfileStore().Load(profileID)
+	if err != nil {
+		return err
+	}
+	orderedPayloads := classifyAndSortProfilePayloads(p, true)
+
+	for _, pr := range orderedPayloads {
+		switch pr.Payload.(type) {
+		// case *cfgprofiles.SCEPPayload:
+		case *cfgprofiles.MDMPayload:
+			err = device.removeMDMPayload()
+			if err != nil {
+				return err
+			}
+		default:
+			fmt.Printf("unknown payload type %s uuid %s not processed\n", pr.CommonPayload.PayloadType, pr.CommonPayload.PayloadUUID)
+		}
+	}
+
+	return device.SystemProfileStore().removeProfile(p.PayloadIdentifier)
+}
+
+func (device *Device) removeMDMPayload() error {
+	c, err := device.MDMClient()
+	if err != nil {
+		return err
+	}
+	err = c.unenroll()
+	if err != nil {
+		return err
+	}
+	device.Save()
+	return nil
 }

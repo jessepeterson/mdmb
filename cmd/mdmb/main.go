@@ -40,6 +40,7 @@ func main() {
 		{"devices-connect", "devices connect to MDM", devicesConnect},
 		{"devices-profiles-list", "list device profiles", devicesProfilesList},
 		{"devices-profiles-install", "install profiles onto device (i.e. enroll)", devicesProfilesInstall},
+		{"devices-profiles-remove", "remove profiles from device", devicesProfilesRemove},
 	}
 	f := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
 	var (
@@ -103,7 +104,7 @@ func devicesProfilesInstall(name string, args []string, rctx RunContext, usage f
 	f.Parse(args)
 
 	if *file == "" {
-		fmt.Fprintln(f.Output(), "must specify enrollment profile")
+		fmt.Fprintln(f.Output(), "must specify profile")
 		f.Usage()
 		os.Exit(2)
 	}
@@ -224,5 +225,40 @@ func devicesProfilesList(name string, args []string, rctx RunContext, usage func
 			continue
 		}
 		fmt.Print(strings.Join(profileUUIDs, "\n"), "\n")
+	}
+}
+
+func devicesProfilesRemove(name string, args []string, rctx RunContext, usage func()) {
+	f := flag.NewFlagSet(name, flag.ExitOnError)
+	var (
+		id = f.String("i", "", "profile identifier")
+	)
+	setSubCommandFlagSetUsage(f, usage)
+	f.Parse(args)
+
+	if *id == "" {
+		fmt.Fprintln(f.Output(), "must specify profile identifier")
+		f.Usage()
+		os.Exit(2)
+	}
+
+	udids, err := device.List(rctx.DB)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	for _, u := range udids {
+		fmt.Println(u)
+		dev, err := device.Load(u, rctx.DB)
+		if err != nil {
+			log.Println(err)
+			continue
+		}
+
+		err = dev.RemoveProfile(*id)
+		if err != nil {
+			log.Println(err)
+			continue
+		}
 	}
 }

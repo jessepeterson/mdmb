@@ -94,12 +94,12 @@ func startConnectWorkers(cwds []*ConnectWorkerData, workers, iterations int) {
 	durrSd = math.Sqrt(durrSd / 10)
 
 	w := tabwriter.NewWriter(os.Stdout, 4, 4, 4, ' ', 0)
-	fmt.Fprintf(w, "Total requests\t%d (%d%%)\n", totalCt, 100)
+	fmt.Fprintf(w, "Total MDM connects\t%d (%d%%)\n", totalCt, 100)
 	fmt.Fprintf(w, "Errors\t%d (%d%%)\n", errCt, errors)
 	fmt.Fprintf(w, "Total elapsed time\t%s\n", time.Since(start))
-	fmt.Fprintf(w, "Min request elapsed\t%s\n", durrLow)
-	fmt.Fprintf(w, "Max request elapsed\t%s\n", durrHi)
-	fmt.Fprintf(w, "Avg (mean) request elapsed\t%s\n", mean)
-	fmt.Fprintf(w, "Stddev request elapsed\t%s\n", time.Duration(durrSd))
+	fmt.Fprintf(w, "Min MDM connect elapsed\t%s\n", durrLow)
+	fmt.Fprintf(w, "Max MDM connect elapsed\t%s\n", durrHi)
+	fmt.Fprintf(w, "Avg (mean) MDM connect elapsed\t%s\n", mean)
+	fmt.Fprintf(w, "Stddev MDM connect elapsed\t%s\n", time.Duration(durrSd))
 	w.Flush()
 }

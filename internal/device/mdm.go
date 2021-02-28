@@ -208,15 +208,35 @@ func (c *MDMClient) connect(connReq *ConnectRequest) error {
 		return err
 	}
 
-	// TODO: handle MDM command
-	fmt.Printf("not handling %s command (command UUID %s\n", resp.Command.RequestType, resp.CommandUUID)
+	var cmdResp *ConnectRequest
+	err = c.handleMDMCommand(resp.Command.RequestType, resp.CommandUUID, respBytes)
+	if err != nil {
+		fmt.Println(err)
+		cmdResp = &ConnectRequest{
+			UDID:        c.Device.UDID,
+			CommandUUID: resp.CommandUUID,
+			Status:      "Error",
+			ErrorChain: []ErrorChain{
+				{
+					ErrorCode:            99999,
+					ErrorDomain:          "Unknown command",
+					LocalizedDescription: "Unknown command",
+					USEnglishDescription: "Unknown command",
+				},
+			},
+		}
+	} else {
+		cmdResp = &ConnectRequest{
+			UDID:        c.Device.UDID,
+			CommandUUID: resp.CommandUUID,
+			Status:      "Acknowledged",
+		}
 
-	// acknowledge our command even though we didn't service it
-	cmdResp := &ConnectRequest{
-		UDID:        c.Device.UDID,
-		CommandUUID: resp.CommandUUID,
-		Status:      "Acknowledged",
 	}
 
 	return c.connect(cmdResp)
+}
+
+func (c *MDMClient) handleMDMCommand(reqType, commandUUID string, _ []byte) error {
+	return fmt.Errorf("not handling %s command (command UUID %s\n", reqType, commandUUID)
 }

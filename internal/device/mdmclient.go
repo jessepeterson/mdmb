@@ -64,6 +64,9 @@ func (c *MDMClient) loadMDMPayload(profileID string) error {
 
 func newMDMClient(device *Device) (*MDMClient, error) {
 	c := &MDMClient{Device: device}
+	if device.MDMIdentityKeychainUUID == "" {
+		return c, errors.New("device not enrolled (no identity uuid)")
+	}
 	err := c.loadIdentityFromKeychain(device.MDMIdentityKeychainUUID)
 	if err != nil {
 		return c, err
@@ -71,6 +74,9 @@ func newMDMClient(device *Device) (*MDMClient, error) {
 	err = c.loadMDMPayload(device.MDMProfileIdentifier)
 	if err != nil {
 		return c, err
+	}
+	if !c.enrolled() {
+		return c, errors.New("device not enrolled")
 	}
 	return c, nil
 }
@@ -98,13 +104,29 @@ func (c *MDMClient) enroll(profileID string) error {
 }
 
 func (c *MDMClient) unenroll() error {
-	// c.CheckIn/device removal?
+	// c.MDMPayload.CheckOutWhenRemoved
 	c.IdentityPrivateKey = nil
 	c.IdentityCertificate = nil
 	c.MDMPayload = nil
 	c.Device.MDMProfileIdentifier = ""
 	c.Device.MDMIdentityKeychainUUID = ""
 	return nil
+}
+
+func (c *MDMClient) enrolled() bool {
+	checks := []bool{
+		c.Device.MDMProfileIdentifier != "",
+		c.Device.MDMIdentityKeychainUUID != "",
+		c.MDMPayload != nil,
+		c.IdentityCertificate != nil,
+		c.IdentityPrivateKey != nil,
+	}
+	for _, v := range checks {
+		if !v {
+			return false
+		}
+	}
+	return true
 }
 
 func (device *Device) MDMClient() (*MDMClient, error) {

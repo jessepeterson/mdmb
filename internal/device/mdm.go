@@ -144,13 +144,29 @@ func (c *MDMClient) tokenUpdate() error {
 	return c.checkinRequest(tu)
 }
 
+type ConnectResponseCommand struct {
+	RequestType string
+}
+
+type ConnectResponse struct {
+	Command     ConnectResponseCommand
+	CommandUUID string
+}
+
 func (c *MDMClient) Connect() error {
-	i := &ConnectRequest{
+	req := &ConnectRequest{
 		UDID:   c.Device.UDID,
 		Status: "Idle",
 	}
+	return c.connect(req)
+}
 
-	plistBytes, err := plist.Marshal(i)
+func (c *MDMClient) connect(connReq *ConnectRequest) error {
+	if !c.enrolled() {
+		return errors.New("device not enrolled")
+	}
+
+	plistBytes, err := plist.Marshal(connReq)
 	if err != nil {
 		return err
 	}
@@ -173,15 +189,34 @@ func (c *MDMClient) Connect() error {
 	}
 	defer res.Body.Close()
 
-	_, err = ioutil.ReadAll(res.Body)
-	if err != nil {
-		return err
-	}
-	// TODO: actually handle the MDM server response ;P
-
 	if res.StatusCode != 200 {
 		return fmt.Errorf("Checkin Request failed with HTTP status: %d", res.StatusCode)
 	}
 
-	return nil
+	respBytes, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		return err
+	}
+
+	if len(respBytes) == 0 {
+		return nil
+	}
+
+	resp := &ConnectResponse{}
+	err = plist.Unmarshal(respBytes, &resp)
+	if err != nil {
+		return err
+	}
+
+	// TODO: handle MDM command
+	fmt.Printf("not handling %s command (command UUID %s\n", resp.Command.RequestType, resp.CommandUUID)
+
+	// acknowledge our command even though we didn't service it
+	cmdResp := &ConnectRequest{
+		UDID:        c.Device.UDID,
+		CommandUUID: resp.CommandUUID,
+		Status:      "Acknowledged",
+	}
+
+	return c.connect(cmdResp)
 }

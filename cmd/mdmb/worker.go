@@ -82,7 +82,12 @@ func startConnectWorkers(cwds []*ConnectWorkerData, workers, iterations int) {
 	fmt.Print("\n\n")
 
 	var durrSd float64
-	mean := durrAcc / time.Duration(totalCt)
+	var mean time.Duration
+	var errors int
+	if totalCt > 0 {
+		mean = durrAcc / time.Duration(totalCt)
+		errors = (errCt * 100) / totalCt
+	}
 	for _, v := range durrVals {
 		durrSd += math.Pow(float64(v)-float64(mean), 2)
 	}
@@ -90,7 +95,7 @@ func startConnectWorkers(cwds []*ConnectWorkerData, workers, iterations int) {
 
 	w := tabwriter.NewWriter(os.Stdout, 4, 4, 4, ' ', 0)
 	fmt.Fprintf(w, "Total requests\t%d (%d%%)\n", totalCt, 100)
-	fmt.Fprintf(w, "Errors\t%d (%d%%)\n", errCt, (errCt*100)/totalCt)
+	fmt.Fprintf(w, "Errors\t%d (%d%%)\n", errCt, errors)
 	fmt.Fprintf(w, "Total elapsed time\t%s\n", time.Since(start))
 	fmt.Fprintf(w, "Min request elapsed\t%s\n", durrLow)
 	fmt.Fprintf(w, "Max request elapsed\t%s\n", durrHi)

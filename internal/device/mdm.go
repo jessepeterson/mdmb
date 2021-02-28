@@ -231,12 +231,11 @@ func (c *MDMClient) connect(connReq *ConnectRequest) error {
 			CommandUUID: resp.CommandUUID,
 			Status:      "Acknowledged",
 		}
-
 	}
 
 	return c.connect(cmdResp)
 }
 
 func (c *MDMClient) handleMDMCommand(reqType, commandUUID string, _ []byte) error {
-	return fmt.Errorf("not handling %s command (command UUID %s\n", reqType, commandUUID)
+	return fmt.Errorf("not handling %s command UUID %s", reqType, commandUUID)
 }

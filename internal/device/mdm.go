@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"net/http"
 
 	"github.com/groob/plist"
@@ -47,7 +48,7 @@ type ErrorChain struct {
 	ErrorCode            int
 	ErrorDomain          string
 	LocalizedDescription string
-	USEnglishDescription string
+	USEnglishDescription string `plist:",omitempty"`
 }
 
 type ConnectRequest struct {
@@ -55,6 +56,8 @@ type ConnectRequest struct {
 	CommandUUID string `plist:",omitempty"`
 	Status      string
 	ErrorChain  []ErrorChain `plist:",omitempty"`
+
+	RequestType string `plist:",omitempty"`
 }
 
 // type ConnectResponse struct {
@@ -161,7 +164,7 @@ func (c *MDMClient) Connect() error {
 	return c.connect(req)
 }
 
-func (c *MDMClient) connect(connReq *ConnectRequest) error {
+func (c *MDMClient) connect(connReq interface{}) error {
 	if !c.enrolled() {
 		return errors.New("device not enrolled")
 	}
@@ -208,34 +211,40 @@ func (c *MDMClient) connect(connReq *ConnectRequest) error {
 		return err
 	}
 
-	var cmdResp *ConnectRequest
-	err = c.handleMDMCommand(resp.Command.RequestType, resp.CommandUUID, respBytes)
+	nextConnReq, err := c.handleMDMCommand(resp.Command.RequestType, resp.CommandUUID, respBytes)
 	if err != nil {
-		fmt.Println(err)
-		cmdResp = &ConnectRequest{
+		log.Println(err)
+		nextConnReq = &ConnectRequest{
 			UDID:        c.Device.UDID,
 			CommandUUID: resp.CommandUUID,
+			RequestType: resp.Command.RequestType,
+			Status:      "Error",
+			ErrorChain: []ErrorChain{
+				{
+					ErrorCode:            99998,
+					ErrorDomain:          "mdmb-handle-mdm-command",
+					LocalizedDescription: "Error handling MDM command",
+				},
+			},
+		}
+	}
+
+	if nextConnReq == nil {
+		fmt.Println("empty response from handling MDM command")
+		nextConnReq = &ConnectRequest{
+			UDID:        c.Device.UDID,
+			CommandUUID: resp.CommandUUID,
+			RequestType: resp.Command.RequestType,
 			Status:      "Error",
 			ErrorChain: []ErrorChain{
 				{
 					ErrorCode:            99999,
-					ErrorDomain:          "Unknown command",
-					LocalizedDescription: "Unknown command",
-					USEnglishDescription: "Unknown command",
+					ErrorDomain:          "mdmb-handle-mdm-command",
+					LocalizedDescription: "Empty response from hanlding MDM command",
 				},
 			},
 		}
-	} else {
-		cmdResp = &ConnectRequest{
-			UDID:        c.Device.UDID,
-			CommandUUID: resp.CommandUUID,
-			Status:      "Acknowledged",
-		}
 	}
 
-	return c.connect(cmdResp)
-}
-
-func (c *MDMClient) handleMDMCommand(reqType, commandUUID string, _ []byte) error {
-	return fmt.Errorf("not handling %s command UUID %s", reqType, commandUUID)
+	return c.connect(nextConnReq)
 }

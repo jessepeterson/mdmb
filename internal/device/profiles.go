@@ -57,6 +57,9 @@ func (ps *ProfileStore) removeProfile(profileID string) error {
 }
 
 func (ps *ProfileStore) savePayloadRefString(profileID string, pld *cfgprofiles.Payload, ekey, value string) error {
+	if value == "" {
+		return errors.New("no payload ref value to save")
+	}
 	return ps.DB.Update(func(tx *bolt.Tx) error {
 		key := fmt.Sprintf("%s_%s_%s_%s", profileID, pld.PayloadIdentifier, pld.PayloadUUID, ekey)
 		return BucketPutOrDeleteString(tx, "profile_payload_refs", key, value)
@@ -70,6 +73,13 @@ func (ps *ProfileStore) loadPayloadRefString(profileID string, pld *cfgprofiles.
 		return nil
 	})
 	return
+}
+
+func (ps *ProfileStore) removePayloadRefString(profileID string, pld *cfgprofiles.Payload, ekey string) error {
+	return ps.DB.Update(func(tx *bolt.Tx) error {
+		key := fmt.Sprintf("%s_%s_%s_%s", profileID, pld.PayloadIdentifier, pld.PayloadUUID, ekey)
+		return BucketPutOrDeleteString(tx, "profile_payload_refs", key, "")
+	})
 }
 
 func (ps *ProfileStore) ListUUIDs() (uuids []string, err error) {
@@ -265,7 +275,7 @@ func (device *Device) installSCEPPayload(profileID string, scepPayload *cfgprofi
 		return "", err
 	}
 
-	err = device.SystemProfileStore().savePayloadRefString(profileID, &scepPayload.Payload, "keychain_identity", kciKey.UUID)
+	err = device.SystemProfileStore().savePayloadRefString(profileID, &scepPayload.Payload, "keychain_identity", kciID.UUID)
 	if err != nil {
 		return "", err
 	}
@@ -281,12 +291,16 @@ func (device *Device) RemoveProfile(profileID string) error {
 	orderedPayloads := classifyAndSortProfilePayloads(p, true)
 
 	for _, pr := range orderedPayloads {
-		switch pr.Payload.(type) {
-		// case *cfgprofiles.SCEPPayload:
+		switch pl := pr.Payload.(type) {
+		case *cfgprofiles.SCEPPayload:
+			err = device.removeSCEPPayload(p.PayloadIdentifier, pl)
+			if err != nil {
+				fmt.Println(err)
+			}
 		case *cfgprofiles.MDMPayload:
 			err = device.removeMDMPayload()
 			if err != nil {
-				return err
+				fmt.Println(err)
 			}
 		default:
 			fmt.Printf("unknown payload type %s uuid %s not processed\n", pr.CommonPayload.PayloadType, pr.CommonPayload.PayloadUUID)
@@ -294,6 +308,50 @@ func (device *Device) RemoveProfile(profileID string) error {
 	}
 
 	return device.SystemProfileStore().removeProfile(p.PayloadIdentifier)
+}
+
+func (device *Device) removeSCEPPayload(profileID string, scepPayload *cfgprofiles.SCEPPayload) error {
+	refStr, err := device.SystemProfileStore().loadPayloadRefString(profileID, &scepPayload.Payload, "keychain_identity")
+	if err != nil {
+		return err
+	}
+
+	kciID, err := LoadKeychainItem(device.SystemKeychain(), refStr)
+	if err != nil {
+		return err
+	}
+
+	kciKey, err := LoadKeychainItem(device.SystemKeychain(), kciID.IdentityKeyUUID)
+	if err != nil {
+		return err
+	}
+
+	kciCert, err := LoadKeychainItem(device.SystemKeychain(), kciID.IdentityCertificateUUID)
+	if err != nil {
+		return err
+	}
+
+	err = kciCert.Delete()
+	if err != nil {
+		return err
+	}
+
+	err = kciKey.Delete()
+	if err != nil {
+		return err
+	}
+
+	err = kciID.Delete()
+	if err != nil {
+		return err
+	}
+
+	err = device.SystemProfileStore().removePayloadRefString(profileID, &scepPayload.Payload, "keychain_identity")
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (device *Device) removeMDMPayload() error {

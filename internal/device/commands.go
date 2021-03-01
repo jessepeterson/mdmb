@@ -5,12 +5,15 @@ import (
 	"strings"
 
 	"github.com/groob/plist"
+	"github.com/jessepeterson/cfgprofiles"
 )
 
 func (c *MDMClient) handleMDMCommand(reqType, commandUUID string, respBytes []byte) (interface{}, error) {
 	switch reqType {
 	case "DeviceInformation":
 		return c.handleDeviceInfo(respBytes)
+	case "ProfileList":
+		return c.handleProfileList(reqType, commandUUID, respBytes)
 	default:
 		fmt.Printf("MDM command not handled: %s UUID %s\n", reqType, commandUUID)
 		return &ConnectRequest{
@@ -42,6 +45,7 @@ type DeviceInfo struct {
 type DeviceInfoResponse struct {
 	ConnectRequest
 	QueryResponses map[string]string
+	RequestType    string
 }
 
 func (c *MDMClient) handleDeviceInfo(respBytes []byte) (interface{}, error) {
@@ -56,6 +60,7 @@ func (c *MDMClient) handleDeviceInfo(respBytes []byte) (interface{}, error) {
 			Status:      "Acknowledged",
 			CommandUUID: cmd.CommandUUID,
 		},
+		RequestType:    cmd.Command.RequestType,
 		QueryResponses: make(map[string]string),
 	}
 	// TODO: check MDM enrollment permission bits in all of this?
@@ -81,5 +86,77 @@ func (c *MDMClient) handleDeviceInfo(respBytes []byte) (interface{}, error) {
 		}
 	}
 	fmt.Printf("unknown DeviceInfo queries: %s\n", strings.Join(unknownQueries, ", "))
+	return resp, nil
+}
+
+// type ProfileListCommand struct {
+// 	ConnectResponseCommand
+// 	ManagedOnly                  bool `plist:",omitempty"`
+// 	RequestRequiresNetworkTether bool `plist:",omitempty"`
+// }
+
+// type ProfileList struct {
+// 	Command     ProfileListCommand
+// 	CommandUUID string
+// }
+
+type ProfileListResponse struct {
+	ConnectRequest
+	ProfileList []*profileListProfile
+	RequestType string
+}
+
+type profileListProfile struct {
+	cfgprofiles.Profile
+	// SignerCertificates []...
+}
+
+// Reassembles profile payloads with only the generic "common" payload and wraps in profile wrapper struct
+func profileForProfileList(p *cfgprofiles.Profile) *profileListProfile {
+	genericPayloads := []*cfgprofiles.Payload{}
+	for _, v := range p.PayloadContent {
+		genericPayloads = append(genericPayloads, cfgprofiles.CommonPayload(v.Payload))
+		fmt.Println(genericPayloads)
+	}
+	newProfile := &profileListProfile{
+		Profile: *p,
+	}
+	newProfile.Profile.PayloadContent = nil
+	for _, v := range genericPayloads {
+		newProfile.Profile.AddPayload(v)
+	}
+	return newProfile
+}
+
+func (c *MDMClient) handleProfileList(reqType, commandUUID string, respBytes []byte) (interface{}, error) {
+	// since we don't handle any of the custom command members just
+	// ignore it for now
+	//
+	// cmd := &ProfileList{}
+	// err := plist.Unmarshal(respBytes, cmd)
+	// if err != nil {
+	// 	return nil, err
+	// }
+	resp := &ProfileListResponse{
+		ConnectRequest: ConnectRequest{
+			UDID:        c.Device.UDID,
+			Status:      "Acknowledged",
+			CommandUUID: commandUUID,
+		},
+		RequestType: reqType,
+	}
+	uuids, err := c.Device.SystemProfileStore().ListUUIDs()
+	if err != nil {
+		return nil, err
+	}
+	for _, uuid := range uuids {
+		// fmt.Println(uuid)
+		p, err := c.Device.SystemProfileStore().Load(uuid)
+		if err != nil {
+			fmt.Printf("error loading profile: %s\n", err)
+		}
+		newProfile := profileForProfileList(p)
+		resp.ProfileList = append(resp.ProfileList, newProfile)
+	}
 	return resp, nil
 }

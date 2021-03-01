@@ -2,6 +2,7 @@ package device
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/groob/plist"
 )
@@ -66,6 +67,7 @@ func (c *MDMClient) handleDeviceInfo(respBytes []byte) (interface{}, error) {
 			"UDID",
 		}
 	}
+	var unknownQueries []string
 	for _, v := range queries {
 		switch v {
 		case "DeviceName":
@@ -75,9 +77,9 @@ func (c *MDMClient) handleDeviceInfo(respBytes []byte) (interface{}, error) {
 		case "UDID":
 			resp.QueryResponses[v] = c.Device.UDID
 		default:
-			fmt.Printf("unknown DeviceInfo query: %s\n", v)
+			unknownQueries = append(unknownQueries, v)
 		}
-
 	}
+	fmt.Printf("unknown DeviceInfo queries: %s\n", strings.Join(unknownQueries, ", "))
 	return resp, nil
 }

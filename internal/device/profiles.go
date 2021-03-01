@@ -121,14 +121,29 @@ func findpayloadAndResultByUUID(plds []*payloadAndResult, uuid string) *payloadA
 	return nil
 }
 
-func (device *Device) ValidateProfileInstall(p *cfgprofiles.Profile) error {
+func (device *Device) ValidateProfileInstall(p *cfgprofiles.Profile, fromMDM bool) error {
 	mdmPlds := p.MDMPayloads()
 	if len(mdmPlds) >= 1 {
 		if len(mdmPlds) > 1 {
 			return errors.New("Profile may only contain one MDM payload")
 		}
-		if device.MDMProfileIdentifier != "" {
+		mdmPld := mdmPlds[0]
+		if fromMDM == false && device.MDMProfileIdentifier != "" {
 			return errors.New("device already enrolled, please unenroll first")
+		}
+		if fromMDM {
+			p, err := device.SystemProfileStore().Load(device.MDMProfileIdentifier)
+			if err != nil {
+				return err
+			}
+			mdmPldsOld := p.MDMPayloads()
+			if len(mdmPlds) != 1 {
+				return errors.New("invalid existing MDM profile")
+			}
+			mdmPldOld := mdmPldsOld[0]
+			if mdmPld.ServerURL != mdmPldOld.ServerURL {
+				return errors.New("MDM payload must contain same URL")
+			}
 		}
 	}
 	return nil
@@ -171,6 +186,14 @@ func classifyAndSortProfilePayloads(p *cfgprofiles.Profile, ascending bool) []*p
 }
 
 func (device *Device) InstallProfile(pb []byte) error {
+	return device.installProfile(pb, false)
+}
+
+func (device *Device) installProfileFromMDM(pb []byte) error {
+	return device.installProfile(pb, true)
+}
+
+func (device *Device) installProfile(pb []byte, fromMDM bool) error {
 	if len(pb) == 0 {
 		return errors.New("empty profile")
 	}
@@ -179,9 +202,23 @@ func (device *Device) InstallProfile(pb []byte) error {
 	if err != nil {
 		return err
 	}
-	err = device.ValidateProfileInstall(p)
+	err = device.ValidateProfileInstall(p, fromMDM)
 	if err != nil {
 		return err
+	}
+	uuids, err := device.SystemProfileStore().ListUUIDs()
+	if err != nil {
+		return err
+	}
+	matched := ""
+	for _, uuid := range uuids {
+		if uuid == p.PayloadIdentifier {
+			matched = uuid
+		}
+	}
+	if matched != "" {
+		// remove the existing installed profile
+		device.RemoveProfile(matched)
 	}
 
 	orderedPayloads := classifyAndSortProfilePayloads(p, false)

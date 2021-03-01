@@ -183,7 +183,7 @@ func (c *MDMClient) handleInstallProfile(respBytes []byte) (interface{}, error) 
 	if err != nil {
 		return nil, err
 	}
-	err = c.Device.InstallProfile(cmd.Command.Payload)
+	err = c.Device.installProfileFromMDM(cmd.Command.Payload)
 	if err != nil {
 		return nil, err
 	}

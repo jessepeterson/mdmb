@@ -13,7 +13,9 @@ func (c *MDMClient) handleMDMCommand(reqType, commandUUID string, respBytes []by
 	case "DeviceInformation":
 		return c.handleDeviceInfo(respBytes)
 	case "ProfileList":
-		return c.handleProfileList(reqType, commandUUID, respBytes)
+		return c.handleProfileList(reqType, commandUUID)
+	case "InstallProfile":
+		return c.handleInstallProfile(respBytes)
 	default:
 		fmt.Printf("MDM command not handled: %s UUID %s\n", reqType, commandUUID)
 		return &ConnectRequest{
@@ -45,7 +47,6 @@ type DeviceInfo struct {
 type DeviceInfoResponse struct {
 	ConnectRequest
 	QueryResponses map[string]string
-	RequestType    string
 }
 
 func (c *MDMClient) handleDeviceInfo(respBytes []byte) (interface{}, error) {
@@ -59,8 +60,8 @@ func (c *MDMClient) handleDeviceInfo(respBytes []byte) (interface{}, error) {
 			UDID:        c.Device.UDID,
 			Status:      "Acknowledged",
 			CommandUUID: cmd.CommandUUID,
+			RequestType: cmd.Command.RequestType,
 		},
-		RequestType:    cmd.Command.RequestType,
 		QueryResponses: make(map[string]string),
 	}
 	// TODO: check MDM enrollment permission bits in all of this?
@@ -103,7 +104,6 @@ func (c *MDMClient) handleDeviceInfo(respBytes []byte) (interface{}, error) {
 type ProfileListResponse struct {
 	ConnectRequest
 	ProfileList []*profileListProfile
-	RequestType string
 }
 
 type profileListProfile struct {
@@ -128,7 +128,7 @@ func profileForProfileList(p *cfgprofiles.Profile) *profileListProfile {
 	return newProfile
 }
 
-func (c *MDMClient) handleProfileList(reqType, commandUUID string, respBytes []byte) (interface{}, error) {
+func (c *MDMClient) handleProfileList(reqType, commandUUID string) (interface{}, error) {
 	// since we don't handle any of the custom command members just
 	// ignore it for now
 	//
@@ -142,8 +142,8 @@ func (c *MDMClient) handleProfileList(reqType, commandUUID string, respBytes []b
 			UDID:        c.Device.UDID,
 			Status:      "Acknowledged",
 			CommandUUID: commandUUID,
+			RequestType: reqType,
 		},
-		RequestType: reqType,
 	}
 	uuids, err := c.Device.SystemProfileStore().ListUUIDs()
 	if err != nil {
@@ -157,6 +157,43 @@ func (c *MDMClient) handleProfileList(reqType, commandUUID string, respBytes []b
 		}
 		newProfile := profileForProfileList(p)
 		resp.ProfileList = append(resp.ProfileList, newProfile)
+	}
+	return resp, nil
+}
+
+type InstallProfileCommand struct {
+	ConnectResponseCommand
+	Payload                      []byte
+	RequestRequiresNetworkTether bool `plist:",omitempty"`
+}
+
+type InstallProfile struct {
+	Command     InstallProfileCommand
+	CommandUUID string
+}
+
+type InstallProfileResponse struct {
+	ConnectRequest
+	RequestType string
+}
+
+func (c *MDMClient) handleInstallProfile(respBytes []byte) (interface{}, error) {
+	cmd := &InstallProfile{}
+	err := plist.Unmarshal(respBytes, cmd)
+	if err != nil {
+		return nil, err
+	}
+	err = c.Device.InstallProfile(cmd.Command.Payload)
+	if err != nil {
+		return nil, err
+	}
+	resp := &InstallProfileResponse{
+		ConnectRequest: ConnectRequest{
+			UDID:        c.Device.UDID,
+			Status:      "Acknowledged",
+			CommandUUID: cmd.CommandUUID,
+			RequestType: cmd.Command.RequestType,
+		},
 	}
 	return resp, nil
 }

@@ -103,14 +103,17 @@ func csrFromSCEPProfilePayload(pl *cfgprofiles.SCEPPayload, device *Device, rand
 	tmpl := &x509util.CertificateRequest{
 		ChallengePassword: plc.Challenge,
 	}
+	// macOS seems to default using just Digital Signature
+	keyUsage := int(x509.KeyUsageDigitalSignature)
 	if plc.KeyUsage != 0 {
-		// this is a bitfield that appears to match Go/X509 definition
-		keyUsageExtn, err := newKeyUsageExtension(plc.KeyUsage)
-		if err != nil {
-			return nil, err
-		}
-		tmpl.ExtraExtensions = append(tmpl.ExtraExtensions, keyUsageExtn)
+		keyUsage = plc.KeyUsage
 	}
+	// this is a bitfield that appears to match Go/X509 definition
+	keyUsageExtn, err := newKeyUsageExtension(keyUsage)
+	if err != nil {
+		return nil, err
+	}
+	tmpl.ExtraExtensions = append(tmpl.ExtraExtensions, keyUsageExtn)
 	for _, onvg := range plc.Subject {
 		for _, onv := range onvg {
 			if len(onv) < 2 {
@@ -136,6 +139,10 @@ func csrFromSCEPProfilePayload(pl *cfgprofiles.SCEPPayload, device *Device, rand
 				return nil, fmt.Errorf("unhandled OID in SCEP payload: %v", onv)
 			}
 		}
+	}
+	// macOS seems to fill a default CN of the PayloadIdentifier if not present
+	if tmpl.Subject.CommonName == "" {
+		tmpl.Subject.CommonName = pl.PayloadIdentifier
 	}
 	// TODO: SANs
 	return x509util.CreateCertificateRequest(rand, tmpl, privKey)

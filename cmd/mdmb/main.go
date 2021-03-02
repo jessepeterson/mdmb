@@ -29,7 +29,8 @@ func help(_ string, _ []string, _ RunContext, usage func()) {
 
 // RunContext contains "global" runtime environment settings
 type RunContext struct {
-	DB *bolt.DB
+	DB    *bolt.DB
+	UUIDs []string
 }
 
 func main() {
@@ -45,6 +46,7 @@ func main() {
 	f := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
 	var (
 		dbPath = f.String("db", "mdmb.db", "mdmb database file path")
+		uuids  = f.String("uuids", "", "comma-separated list of device UUIDs")
 	)
 	f.Usage = func() {
 		fmt.Fprintf(f.Output(), "%s [flags] <subcommand> [flags]\n", f.Name())
@@ -75,6 +77,10 @@ func main() {
 
 	rctx := RunContext{DB: db}
 
+	if *uuids != "" {
+		rctx.UUIDs = strings.Split(*uuids, ",")
+	}
+
 	for _, sc := range subCmds {
 		if f.Args()[0] == sc.Name {
 			sc.Func(sc.Name, f.Args()[1:], rctx, f.Usage)
@@ -93,6 +99,13 @@ func setSubCommandFlagSetUsage(f *flag.FlagSet, usage func()) {
 		fmt.Fprintf(f.Output(), "\nFlags for %s subcommand:\n", f.Name())
 		f.PrintDefaults()
 	}
+}
+
+func deviceUUIDs(rctx RunContext) ([]string, error) {
+	if len(rctx.UUIDs) != 0 {
+		return rctx.UUIDs, nil
+	}
+	return device.List(rctx.DB)
 }
 
 func devicesProfilesInstall(name string, args []string, rctx RunContext, usage func()) {
@@ -114,7 +127,7 @@ func devicesProfilesInstall(name string, args []string, rctx RunContext, usage f
 		log.Fatal(err)
 	}
 
-	udids, err := device.List(rctx.DB)
+	udids, err := deviceUUIDs(rctx)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -136,6 +149,10 @@ func devicesProfilesInstall(name string, args []string, rctx RunContext, usage f
 }
 
 func devicesList(name string, args []string, rctx RunContext, usage func()) {
+	if len(rctx.UUIDs) > 0 {
+		log.Fatal("cannot supply UUIDs for " + name)
+	}
+
 	udids, err := device.List(rctx.DB)
 	if err != nil {
 		log.Fatal(err)
@@ -153,6 +170,10 @@ func devicesCreate(name string, args []string, rctx RunContext, usage func()) {
 	)
 	setSubCommandFlagSetUsage(f, usage)
 	f.Parse(args)
+
+	if len(rctx.UUIDs) > 0 {
+		log.Fatal("cannot supply UUIDs for " + name)
+	}
 
 	fmt.Println(*number)
 	for i := 0; i < *number; i++ {
@@ -176,7 +197,7 @@ func devicesConnect(name string, args []string, rctx RunContext, usage func()) {
 	setSubCommandFlagSetUsage(f, usage)
 	f.Parse(args)
 
-	udids, err := device.List(rctx.DB)
+	udids, err := deviceUUIDs(rctx)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -206,7 +227,7 @@ func devicesConnect(name string, args []string, rctx RunContext, usage func()) {
 }
 
 func devicesProfilesList(name string, args []string, rctx RunContext, usage func()) {
-	udids, err := device.List(rctx.DB)
+	udids, err := deviceUUIDs(rctx)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -242,7 +263,7 @@ func devicesProfilesRemove(name string, args []string, rctx RunContext, usage fu
 		os.Exit(2)
 	}
 
-	udids, err := device.List(rctx.DB)
+	udids, err := deviceUUIDs(rctx)
 	if err != nil {
 		log.Fatal(err)
 	}

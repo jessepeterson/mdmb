@@ -1,20 +1,21 @@
 # mdmb
 
-mdmb — short for MDM Benchmark, à la [ab](https://httpd.apache.org/docs/2.4/programs/ab.html) — is a tool for simulating Apple device enrollments into Apple MDM servers.
+mdmb — short for MDM Benchmark, à la [ab](https://httpd.apache.org/docs/2.4/programs/ab.html) — is a tool for simulating Apple devices enrolling into Apple MDM servers.
+
+The device simulation tries to be similar to a real Apple device. As such *mdmb* simulates a device Keychain, Configuration Profile store, Profile and per-Profile Payload processing for profile installation & removal, an MDM Client, and more which are used when interacting with Apple MDM servers.
 
 The goal of this project is to facilitate testing of Apple MDM servers in various ways. I.e:
 
   - Load & scalability testing
   - CI/CD
-  - MDM protocol & feature development
-  - MDM server monitoring
-  - Automated testing
+  - MDM protocol testing & feature development
+  - Monitoring & validation
 
 ### On APNs
 
 A key component of Apple MDM is Apple's Push Notification service (APNs). However, as we are only simulating devices we cannot authenticate to Apple's APNs service. Therefore this part of the MDM communication channel simply doesn't work. We generate fake [push tokens and push magic](https://developer.apple.com/documentation/devicemanagement/tokenupdaterequest?language=objc) as we enroll with the MDM server. As such the MDM server attempting to send push notifications to our simulated devices will not succeed. Even if the notifications were processed by Apple's servers `mdmb` wouldn't be able to *receive* those notifications anyway.
 
-Because the MDM server can't signal the device to connect to it we instead simulate a device receiving a push notification by requesting it connect to the MDM server on demand, shown below.
+Because the MDM server can't signal the device to connect to it we instead simulate a device receiving a push notification by specifically requesting that it connect to the MDM server on demand, shown below.
 
 ## Getting started
 

@@ -161,10 +161,21 @@ func (c *MDMClient) Connect() error {
 		UDID:   c.Device.UDID,
 		Status: "Idle",
 	}
-	return c.connect(req)
+	client := &http.Client{}
+	return c.connect(client, req)
 }
 
-func (c *MDMClient) connect(connReq interface{}) error {
+func httpRequestBytes(client *http.Client, req *http.Request) (bytes []byte, res *http.Response, err error) {
+	res, err = client.Do(req)
+	if err != nil {
+		return
+	}
+	defer res.Body.Close()
+	bytes, err = ioutil.ReadAll(res.Body)
+	return
+}
+
+func (c *MDMClient) connect(client *http.Client, connReq interface{}) error {
 	if !c.enrolled() {
 		return errors.New("device not enrolled")
 	}
@@ -179,26 +190,19 @@ func (c *MDMClient) connect(connReq interface{}) error {
 		return err
 	}
 
-	client := &http.Client{}
 	req, err := http.NewRequest("PUT", c.MDMPayload.ServerURL, bytes.NewReader(plistBytes))
 	if err != nil {
 		return err
 	}
 	req.Header.Set("Mdm-Signature", mdmSig)
 
-	res, err := client.Do(req)
+	respBytes, res, err := httpRequestBytes(client, req)
 	if err != nil {
 		return err
 	}
-	defer res.Body.Close()
 
 	if res.StatusCode != 200 {
-		return fmt.Errorf("Checkin Request failed with HTTP status: %d", res.StatusCode)
-	}
-
-	respBytes, err := ioutil.ReadAll(res.Body)
-	if err != nil {
-		return err
+		return fmt.Errorf("Connect Request failed with HTTP status: %d", res.StatusCode)
 	}
 
 	if len(respBytes) == 0 {
@@ -246,5 +250,5 @@ func (c *MDMClient) connect(connReq interface{}) error {
 		}
 	}
 
-	return c.connect(nextConnReq)
+	return c.connect(client, nextConnReq)
 }

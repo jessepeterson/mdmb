@@ -7,9 +7,9 @@ The device simulation tries to be similar to a real Apple device. As such *mdmb*
 The goal of this project is to facilitate testing of Apple MDM servers in various ways. I.e:
 
   - Load & scalability testing
-  - CI/CD
   - MDM protocol testing & feature development
   - Monitoring & validation
+  - CI/CD
 
 ### On APNs
 

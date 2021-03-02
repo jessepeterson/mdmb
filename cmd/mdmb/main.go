@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bufio"
+	"errors"
 	"flag"
 	"fmt"
 	"io/ioutil"
@@ -46,7 +48,7 @@ func main() {
 	f := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
 	var (
 		dbPath = f.String("db", "mdmb.db", "mdmb database file path")
-		uuids  = f.String("uuids", "", "comma-separated list of device UUIDs")
+		uuids  = f.String("uuids", "", "comma-separated list of device UUIDs, '-' to read from stdin, or 'all' for all devices")
 	)
 	f.Usage = func() {
 		fmt.Fprintf(f.Output(), "%s [flags] <subcommand> [flags]\n", f.Name())
@@ -78,7 +80,23 @@ func main() {
 	rctx := RunContext{DB: db}
 
 	if *uuids != "" {
-		rctx.UUIDs = strings.Split(*uuids, ",")
+		if *uuids == "all" {
+			var err error
+			rctx.UUIDs, err = device.List(rctx.DB)
+			if err != nil {
+				log.Fatal(err)
+			}
+		} else if *uuids == "-" {
+			scanner := bufio.NewScanner(os.Stdin)
+			for scanner.Scan() {
+				rctx.UUIDs = append(rctx.UUIDs, scanner.Text())
+			}
+			if err := scanner.Err(); err != nil {
+				log.Fatal(err)
+			}
+		} else {
+			rctx.UUIDs = strings.Split(*uuids, ",")
+		}
 	}
 
 	for _, sc := range subCmds {
@@ -101,11 +119,13 @@ func setSubCommandFlagSetUsage(f *flag.FlagSet, usage func()) {
 	}
 }
 
-func deviceUUIDs(rctx RunContext) ([]string, error) {
-	if len(rctx.UUIDs) != 0 {
-		return rctx.UUIDs, nil
+func checkDeviceUUIDs(rctx RunContext, requireEmpty bool, subCmdName string) error {
+	if requireEmpty && len(rctx.UUIDs) != 0 {
+		return errors.New("cannot supply UUIDs for " + subCmdName)
+	} else if !requireEmpty && len(rctx.UUIDs) < 1 {
+		return errors.New("no device UUIDs supplied, use -uuids argument for " + subCmdName)
 	}
-	return device.List(rctx.DB)
+	return nil
 }
 
 func devicesProfilesInstall(name string, args []string, rctx RunContext, usage func()) {
@@ -127,12 +147,12 @@ func devicesProfilesInstall(name string, args []string, rctx RunContext, usage f
 		log.Fatal(err)
 	}
 
-	udids, err := deviceUUIDs(rctx)
+	err = checkDeviceUUIDs(rctx, false, name)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	for _, u := range udids {
+	for _, u := range rctx.UUIDs {
 		fmt.Println(u)
 		dev, err := device.Load(u, rctx.DB)
 		if err != nil {
@@ -149,16 +169,17 @@ func devicesProfilesInstall(name string, args []string, rctx RunContext, usage f
 }
 
 func devicesList(name string, args []string, rctx RunContext, usage func()) {
-	if len(rctx.UUIDs) > 0 {
-		log.Fatal("cannot supply UUIDs for " + name)
-	}
-
-	udids, err := device.List(rctx.DB)
+	err := checkDeviceUUIDs(rctx, true, name)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	for _, v := range udids {
+	uuids, err := device.List(rctx.DB)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	for _, v := range uuids {
 		fmt.Println(v)
 	}
 }
@@ -171,16 +192,18 @@ func devicesCreate(name string, args []string, rctx RunContext, usage func()) {
 	setSubCommandFlagSetUsage(f, usage)
 	f.Parse(args)
 
-	if len(rctx.UUIDs) > 0 {
-		log.Fatal("cannot supply UUIDs for " + name)
+	err := checkDeviceUUIDs(rctx, true, name)
+	if err != nil {
+		log.Fatal(err)
 	}
 
-	fmt.Println(*number)
+	fmt.Printf("creating %d device(s)\n", *number)
 	for i := 0; i < *number; i++ {
 		d := device.New("", rctx.DB)
 		err := d.Save()
 		if err != nil {
 			log.Fatal(err)
+			continue
 		}
 
 		fmt.Println(d.UDID)
@@ -191,20 +214,20 @@ func devicesCreate(name string, args []string, rctx RunContext, usage func()) {
 func devicesConnect(name string, args []string, rctx RunContext, usage func()) {
 	f := flag.NewFlagSet(name, flag.ExitOnError)
 	var (
-		workers    = f.Int("w", 1, "workers (concurrency)")
+		workers    = f.Int("w", 1, "number of workers (concurrency)")
 		iterations = f.Int("i", 1, "number of iterations of connects")
 	)
 	setSubCommandFlagSetUsage(f, usage)
 	f.Parse(args)
 
-	udids, err := deviceUUIDs(rctx)
+	err := checkDeviceUUIDs(rctx, false, name)
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	workerData := []*ConnectWorkerData{}
 
-	for _, u := range udids {
+	for _, u := range rctx.UUIDs {
 		dev, err := device.Load(u, rctx.DB)
 		if err != nil {
 			log.Println(err)
@@ -227,12 +250,12 @@ func devicesConnect(name string, args []string, rctx RunContext, usage func()) {
 }
 
 func devicesProfilesList(name string, args []string, rctx RunContext, usage func()) {
-	udids, err := deviceUUIDs(rctx)
+	err := checkDeviceUUIDs(rctx, false, name)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	for _, u := range udids {
+	for _, u := range rctx.UUIDs {
 		fmt.Printf("profiles for UUID: %s\n", u)
 		dev, err := device.Load(u, rctx.DB)
 		if err != nil {
@@ -245,7 +268,9 @@ func devicesProfilesList(name string, args []string, rctx RunContext, usage func
 			log.Println(err)
 			continue
 		}
-		fmt.Print(strings.Join(profileUUIDs, "\n"), "\n")
+		for _, uuid := range profileUUIDs {
+			fmt.Println(uuid)
+		}
 	}
 }
 
@@ -263,12 +288,12 @@ func devicesProfilesRemove(name string, args []string, rctx RunContext, usage fu
 		os.Exit(2)
 	}
 
-	udids, err := deviceUUIDs(rctx)
+	err := checkDeviceUUIDs(rctx, false, name)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	for _, u := range udids {
+	for _, u := range rctx.UUIDs {
 		fmt.Println(u)
 		dev, err := device.Load(u, rctx.DB)
 		if err != nil {

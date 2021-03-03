@@ -33,6 +33,10 @@ OTA & ADE (DEP) enrollments ostensibly validate the initial enrollment data sign
 
 ### Installing & Building
 
+Download one of the [release binary zip files](https://github.com/jessepeterson/mdmb/releases), unzip it, and execute the `mdmb` binary inside.
+
+To build from source: clone the repo, issue a `make` in the repo dir and you should get an `mdmb` binary.
+
 ### Create device(s)
 
 The `devices-create` subcommand of `mdmb` will make new devices.

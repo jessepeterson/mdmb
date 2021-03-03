@@ -1,6 +1,6 @@
 # mdmb
 
-mdmb — short for MDM Benchmark, à la [ab](https://httpd.apache.org/docs/2.4/programs/ab.html) — is a tool for simulating Apple devices enrolling into Apple MDM servers.
+mdmb — short for MDM Benchmark, à la [ab](https://httpd.apache.org/docs/2.4/programs/ab.html) — is a tool for simulating Apple devices interacting with Apple MDM servers.
 
 *mdmb* creates sets of fake Apple devices and allows you to enroll in, connect to, and thereby interact with Apple MDM servers. Interactions include receiving and responding to MDM commands and some common device actions like installing profiles and responding to information commands.
 

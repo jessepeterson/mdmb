@@ -99,7 +99,7 @@ DFB76ED4-4D29-4CB6-B930-1CAF8635868A
 C432E77F-F167-4051-B3AB-A3B751C20AA9
 ```
 
-#### Scripting devices
+### Scripting devices
 
 By combining commands you can script queuing device commands (i.e. to be connected to de-queued by the `devices-connect` subcommand later):
 

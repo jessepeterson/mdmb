@@ -17,6 +17,8 @@ import (
 	bolt "go.etcd.io/bbolt"
 )
 
+var version = "unknown"
+
 type subCmdFn func(string, []string, RunContext, func())
 
 type subCmd struct {
@@ -44,6 +46,7 @@ func main() {
 		{"devices-profiles-list", "list device profiles", devicesProfilesList},
 		{"devices-profiles-install", "install profiles onto device (i.e. enroll)", devicesProfilesInstall},
 		{"devices-profiles-remove", "remove profiles from device", devicesProfilesRemove},
+		{"version", "display version", versionSubCmd},
 	}
 	f := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
 	var (
@@ -307,4 +310,8 @@ func devicesProfilesRemove(name string, args []string, rctx RunContext, usage fu
 			continue
 		}
 	}
+}
+
+func versionSubCmd(_ string, _ []string, _ RunContext, _ func()) {
+	fmt.Println(version)
 }

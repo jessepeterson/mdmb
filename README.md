@@ -47,6 +47,8 @@ creating 1 device(s)
 B0ECC518-1C7F-4DAF-B726-E7A169DB4CF8
 ```
 
+*mdmb* stores devices in its database file on disk called `mdmb.db` by default.
+
 Want to make more? Invoke `devices-create` again. Want to make *many* more? Use the `-n` switch and supply the number you want to create.
 
 ```bash

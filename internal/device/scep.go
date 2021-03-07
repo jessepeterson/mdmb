@@ -18,7 +18,7 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/jessepeterson/cfgprofiles"
 	scepclient "github.com/micromdm/scep/client"
-	"github.com/micromdm/scep/crypto/x509util"
+	"github.com/micromdm/scep/cryptoutil/x509util"
 	"github.com/micromdm/scep/scep"
 )
 
@@ -244,9 +244,9 @@ func scepNewPKCSReq(csrBytes []byte, url, challenge string) (*x509.Certificate, 
 		return nil, fmt.Errorf("PKIOperation for PKCSReq: %w", err)
 	}
 
-	respMsg, err := scep.ParsePKIMessage(respBytes, scep.WithLogger(logger))
+	respMsg, err := scep.ParsePKIMessage(respBytes, scep.WithLogger(logger), scep.WithCACerts(certs))
 	if err != nil {
-		return nil, fmt.Errorf("PKCSReq parsing pkiMessage response %w", err)
+		return nil, fmt.Errorf("PKCSReq parsing pkiMessage response: %w", err)
 	}
 
 	if respMsg.PKIStatus != scep.SUCCESS {

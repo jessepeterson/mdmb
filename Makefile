@@ -1,25 +1,28 @@
 VERSION = $(shell git describe --tags --always --dirty)
-BUILD_VERSION = "-X main.version=${VERSION}"
+LDFLAGS=-ldflags "-X main.version=$(VERSION)"
+OSARCH=$(shell go env GOHOSTOS)-$(shell go env GOHOSTARCH)
 
-build:
-	go build -ldflags ${BUILD_VERSION} ./cmd/mdmb
+BINARIES=\
+	mdmb-darwin-amd64 \
+	mdmb-linux-amd64 \
+	mdmb-windows-amd64.exe
 
-clean: clean-release
-	rm -f mdmb
+my: mdmb-$(OSARCH)
 
-release:
-	GOOS=darwin GOARCH=amd64 go build -ldflags ${BUILD_VERSION} -o mdmb ./cmd/mdmb
-	zip mdmb-darwin-amd64-${VERSION}.zip mdmb
-	GOOS=linux GOARCH=amd64 go build -ldflags ${BUILD_VERSION} -o mdmb ./cmd/mdmb
-	zip mdmb-linux-amd64-${VERSION}.zip mdmb
-	GOOS=windows GOARCH=amd64 go build -ldflags ${BUILD_VERSION} -o mdmb.exe ./cmd/mdmb
-	zip mdmb-windows-amd64-${VERSION}.zip mdmb.exe
+$(BINARIES):
+	GOOS=$(word 2,$(subst -, ,$@)) GOARCH=$(word 3,$(subst -, ,$(subst .exe,,$@))) go build $(LDFLAGS) -o $@ ./cmd/mdmb
 
-clean-release:
-	rm -f \
-		mdmb-darwin-amd64-*.zip \
-		mdmb-linux-amd64-*.zip \
-		mdmb.exe \
-		mdmb-windows-amd64-*.zip
+%-$(VERSION).zip: %.exe
+	rm -f $@
+	zip $@ $<
 
-.PHONY: build clean release clean-release
+%-$(VERSION).zip: %
+	rm -f $@
+	zip $@ $<
+
+clean:
+	rm -f mdmb-*
+
+release: $(foreach bin,$(BINARIES),$(subst .exe,,$(bin))-$(VERSION).zip)
+
+.PHONY: my $(BINARIES) clean release

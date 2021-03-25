@@ -285,7 +285,13 @@ func (device *Device) installSCEPPayload(profileID string, scepPayload *cfgprofi
 		return "", err
 	}
 
-	cert, err := scepNewPKCSReq(csrBytes, scepPayload.PayloadContent.URL, scepPayload.PayloadContent.Challenge)
+	cert, err := scepNewPKCSReq(
+		csrBytes,
+		scepPayload.PayloadContent.URL,
+		scepPayload.PayloadContent.Challenge,
+		scepPayload.PayloadContent.Name,
+		scepPayload.PayloadContent.CAFingerprint,
+	)
 	if err != nil {
 		return "", err
 	}

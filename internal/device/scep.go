@@ -17,9 +17,9 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/jessepeterson/cfgprofiles"
-	scepclient "github.com/micromdm/scep/client"
-	"github.com/micromdm/scep/cryptoutil/x509util"
-	"github.com/micromdm/scep/scep"
+	scepclient "github.com/micromdm/scep/v2/client"
+	"github.com/micromdm/scep/v2/cryptoutil/x509util"
+	"github.com/micromdm/scep/v2/scep"
 )
 
 const defaultRSAKeySize = 1024
@@ -181,7 +181,7 @@ func selfSign() (*rsa.PrivateKey, *x509.Certificate, error) {
 	return priv, cert, err
 }
 
-func scepNewPKCSReq(csrBytes []byte, url, challenge string) (*x509.Certificate, error) {
+func scepNewPKCSReq(csrBytes []byte, url, challenge, caMessage string, fingerprint []byte) (*x509.Certificate, error) {
 	logger := log.NewLogfmtLogger(os.Stderr)
 	logger = log.With(logger, "ts", log.DefaultTimestampUTC)
 	cl, err := scepclient.New(url, logger)
@@ -189,7 +189,7 @@ func scepNewPKCSReq(csrBytes []byte, url, challenge string) (*x509.Certificate, 
 		return nil, err
 	}
 	ctx := context.Background()
-	resp, certNum, err := cl.GetCACert(ctx)
+	resp, certNum, err := cl.GetCACert(ctx, caMessage)
 	if err != nil {
 		return nil, err
 	}
@@ -200,15 +200,21 @@ func scepNewPKCSReq(csrBytes []byte, url, challenge string) (*x509.Certificate, 
 			if err != nil {
 				return nil, err
 			}
-			if len(certs) < 1 {
-				return nil, fmt.Errorf("no certificates returned")
-			}
 		} else {
 			certs, err = x509.ParseCertificates(resp)
 			if err != nil {
 				return nil, err
 			}
 		}
+	}
+
+	selector := scep.NopCertsSelector()
+	if len(fingerprint) == 32 {
+		var hash [32]byte
+		copy(hash[:], fingerprint)
+		selector = scep.SHA256FingerprintCertsSelector(hash)
+	} else if len(fingerprint) > 0 {
+		fmt.Printf("CAFingerprint length %d not supported\n", len(fingerprint))
 	}
 
 	scepTmpKey, scepTmpCert, err := selfSign()
@@ -234,7 +240,7 @@ func scepNewPKCSReq(csrBytes []byte, url, challenge string) (*x509.Certificate, 
 		return nil, err
 	}
 
-	msg, err := scep.NewCSRRequest(csr, tmpl, scep.WithLogger(logger))
+	msg, err := scep.NewCSRRequest(csr, tmpl, scep.WithLogger(logger), scep.WithCertsSelector(selector))
 	if err != nil {
 		return nil, fmt.Errorf("creating csr pkiMessage: %w", err)
 	}
@@ -244,7 +250,7 @@ func scepNewPKCSReq(csrBytes []byte, url, challenge string) (*x509.Certificate, 
 		return nil, fmt.Errorf("PKIOperation for PKCSReq: %w", err)
 	}
 
-	respMsg, err := scep.ParsePKIMessage(respBytes, scep.WithLogger(logger), scep.WithCACerts(certs))
+	respMsg, err := scep.ParsePKIMessage(respBytes, scep.WithLogger(logger), scep.WithCACerts(msg.Recipients))
 	if err != nil {
 		return nil, fmt.Errorf("PKCSReq parsing pkiMessage response: %w", err)
 	}

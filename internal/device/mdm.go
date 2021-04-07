@@ -110,12 +110,18 @@ func (c *MDMClient) checkinRequest(i interface{}) error {
 		return err
 	}
 
+	ciURL := c.MDMPayload.CheckInURL
+	if ciURL == "" {
+		ciURL = c.MDMPayload.ServerURL
+	}
+
 	client := &http.Client{}
-	req, err := http.NewRequest("PUT", c.MDMPayload.CheckInURL, bytes.NewReader(plistBytes))
+	req, err := http.NewRequest("PUT", ciURL, bytes.NewReader(plistBytes))
 	if err != nil {
 		return err
 	}
 	req.Header.Set("Mdm-Signature", mdmSig)
+	req.Header.Set("Content-Type", "application/x-apple-aspen-mdm-checkin")
 
 	res, err := client.Do(req)
 	if err != nil {

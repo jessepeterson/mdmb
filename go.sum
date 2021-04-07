@@ -153,8 +153,10 @@ github.com/mattn/go-isatty v0.0.3/go.mod h1:M+lRXTBqGeGNdLjl/ufCoiOlB5xdOkqRJdNx
 github.com/mattn/go-isatty v0.0.4/go.mod h1:M+lRXTBqGeGNdLjl/ufCoiOlB5xdOkqRJdNxMWT7Zi4=
 github.com/mattn/go-runewidth v0.0.2/go.mod h1:LwmH8dsx7+W8Uxz3IHJYH5QSwggIsqBzpuz5H//U1FU=
 github.com/matttproud/golang_protobuf_extensions v1.0.1/go.mod h1:D8He9yQNgCq6Z5Ld7szi9bcBfOoFv/3dc6xSMkL2PC0=
-github.com/micromdm/scep/v2 v2.0.0 h1:cRzcY0S5QX+0+J+7YC4P2uZSnfMup8S8zJu/bLFgOkA=
-github.com/micromdm/scep/v2 v2.0.0/go.mod h1:ouaDs5tcjOjdHD/h8BGaQsWE87MUnQ/wMTMgfMMIpPc=
+github.com/micromdm/scep/v2 v2.0.1-0.20210326031541-04955d054051 h1:YEggpHPQpeMdC1O2TVtgGEOCNTtkOiHn9+PxM3SXojU=
+github.com/micromdm/scep/v2 v2.0.1-0.20210326031541-04955d054051/go.mod h1:ouaDs5tcjOjdHD/h8BGaQsWE87MUnQ/wMTMgfMMIpPc=
+github.com/micromdm/scep/v2 v2.0.1-0.20210330040640-fa847cef3c45 h1:u1uUw79cu89417X9bzqrADQifhc75nZqIky04kuyXQY=
+github.com/micromdm/scep/v2 v2.0.1-0.20210330040640-fa847cef3c45/go.mod h1:ouaDs5tcjOjdHD/h8BGaQsWE87MUnQ/wMTMgfMMIpPc=
 github.com/miekg/dns v1.0.14/go.mod h1:W1PPwlIAgtquWBMBEV9nkV9Cazfe8ScdGz/Lj7v3Nrg=
 github.com/mitchellh/cli v1.0.0/go.mod h1:hNIlj7HEI86fIcpObd7a0FcrxTWetlwJDGcceTlRvqc=
 github.com/mitchellh/go-homedir v1.0.0/go.mod h1:SfyaCUpYCn1Vlf4IUYiD9fPX4A5wJrkLzIz1N1q0pr0=

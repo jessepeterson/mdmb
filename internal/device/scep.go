@@ -2,8 +2,12 @@ package device
 
 import (
 	"context"
+	"crypto"
+	_ "crypto/md5"
 	"crypto/rand"
 	"crypto/rsa"
+	_ "crypto/sha1"
+	_ "crypto/sha256"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/asn1"
@@ -209,11 +213,18 @@ func scepNewPKCSReq(csrBytes []byte, url, challenge, caMessage string, fingerpri
 	}
 
 	selector := scep.NopCertsSelector()
-	if len(fingerprint) == 32 {
-		var hash [32]byte
-		copy(hash[:], fingerprint)
-		selector = scep.SHA256FingerprintCertsSelector(hash)
-	} else if len(fingerprint) > 0 {
+	hashType := crypto.Hash(0)
+	switch len(fingerprint) {
+	case 16:
+		hashType = crypto.MD5
+	case 20:
+		hashType = crypto.SHA1
+	case 32:
+		hashType = crypto.SHA256
+	}
+	if hashType != 0 {
+		selector = scep.FingerprintCertsSelector(hashType, fingerprint)
+	} else {
 		fmt.Printf("CAFingerprint length %d not supported\n", len(fingerprint))
 	}
 

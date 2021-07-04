@@ -94,7 +94,7 @@ func (c *MDMClient) enroll(profileID string) error {
 		return err
 	}
 
-	err = c.tokenUpdate()
+	err = c.TokenUpdate("")
 	if err != nil {
 		return err
 	}

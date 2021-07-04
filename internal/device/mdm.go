@@ -141,15 +141,14 @@ func (c *MDMClient) checkinRequest(i interface{}) error {
 	return nil
 }
 
-func (c *MDMClient) tokenUpdate() error {
+func (c *MDMClient) TokenUpdate(addl string) error {
 	tu := &TokenUpdateRequest{
 		MessageType: "TokenUpdate",
-		PushMagic:   "fakePushMagic",
-		Token:       []byte("fakeToken"),
+		PushMagic:   "fakePushMagic" + addl,
+		Token:       []byte("fakeToken" + addl),
 		Topic:       c.MDMPayload.Topic,
 		UDID:        c.Device.UDID,
 	}
-
 	return c.checkinRequest(tu)
 }
 

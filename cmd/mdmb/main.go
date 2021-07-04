@@ -43,6 +43,7 @@ func main() {
 		{"devices-list", "list created devices", devicesList},
 		{"devices-create", "create new devices", devicesCreate},
 		{"devices-connect", "devices connect to MDM", devicesConnect},
+		{"devices-tokenupdate", "send another tokenupdate to MDM server", devicesTokenUpdate},
 		{"devices-profiles-list", "list device profiles", devicesProfilesList},
 		{"devices-profiles-install", "install profiles onto device (i.e. enroll)", devicesProfilesInstall},
 		{"devices-profiles-remove", "remove profiles from device", devicesProfilesRemove},
@@ -212,6 +213,41 @@ func devicesCreate(name string, args []string, rctx RunContext, usage func()) {
 		fmt.Println(d.UDID)
 	}
 
+}
+
+func devicesTokenUpdate(name string, args []string, rctx RunContext, usage func()) {
+	f := flag.NewFlagSet(name, flag.ExitOnError)
+	var (
+		number = f.String("addl", "", "additional text inside token update values")
+	)
+	setSubCommandFlagSetUsage(f, usage)
+	f.Parse(args)
+
+	err := checkDeviceUUIDs(rctx, false, name)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	for _, u := range rctx.UUIDs {
+		fmt.Println(u)
+
+		dev, err := device.Load(u, rctx.DB)
+		if err != nil {
+			log.Println(err)
+			continue
+		}
+
+		client, err := dev.MDMClient()
+		if err != nil {
+			log.Println(err)
+			continue
+		}
+
+		err = client.TokenUpdate(*number)
+		if err != nil {
+			log.Println(err)
+		}
+	}
 }
 
 func devicesConnect(name string, args []string, rctx RunContext, usage func()) {

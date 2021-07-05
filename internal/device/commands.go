@@ -9,6 +9,15 @@ import (
 )
 
 func (c *MDMClient) handleMDMCommand(reqType, commandUUID string, respBytes []byte) (interface{}, error) {
+	if c.notNow {
+		return &ConnectRequest{
+			UDID:        c.Device.UDID,
+			CommandUUID: commandUUID,
+			Status:      "NotNow",
+			RequestType: reqType,
+		}, nil
+	}
+
 	switch reqType {
 	case "DeviceInformation":
 		return c.handleDeviceInfo(respBytes)

@@ -14,6 +14,8 @@ type MDMClient struct {
 
 	IdentityCertificate *x509.Certificate
 	IdentityPrivateKey  *rsa.PrivateKey
+
+	notNow bool
 }
 
 func (c *MDMClient) loadIdentityFromKeychain(uuid string) error {

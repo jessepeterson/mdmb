@@ -1,6 +1,7 @@
 package device
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -187,12 +188,13 @@ type InstallProfileResponse struct {
 }
 
 func (c *MDMClient) handleInstallProfile(respBytes []byte) (interface{}, error) {
+	ctx := context.Background()
 	cmd := &InstallProfile{}
 	err := plist.Unmarshal(respBytes, cmd)
 	if err != nil {
 		return nil, err
 	}
-	err = c.Device.installProfileFromMDM(cmd.Command.Payload)
+	err = c.Device.installProfileFromMDM(ctx, cmd.Command.Payload)
 	if err != nil {
 		return nil, err
 	}

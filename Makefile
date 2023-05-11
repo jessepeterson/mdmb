@@ -4,6 +4,7 @@ OSARCH=$(shell go env GOHOSTOS)-$(shell go env GOHOSTARCH)
 
 MDMB=\
 	mdmb-darwin-amd64 \
+	mdmb-darwin-arm64 \
 	mdmb-linux-amd64 \
 	mdmb-windows-amd64.exe
 

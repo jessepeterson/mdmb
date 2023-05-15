@@ -19,6 +19,8 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"strconv"
+	"strings"
 
 	"github.com/fxamacker/cbor/v2"
 	"github.com/jessepeterson/cfgprofiles"
@@ -90,6 +92,15 @@ func newACMECertificateRequest(ctx context.Context, device *Device, pl *cfgprofi
 		return nil, nil, fmt.Errorf(`failed parsing DirectoryURL: %w`, err)
 	}
 
+	if pl.SubjectAltName != nil {
+		// currently a flow in which SubjectAltName is set is not supported,
+		// because the ACME client that's currently in use will automatically
+		// set the challenge types based on contents of the CSR.
+		// TODO: determine how we can use/instruct the `acmez` client to
+		// only use specific challenge types. In this case `device-attest-01`.
+		return nil, nil, errors.New(`"SubjectAltName" not yet supported`)
+	}
+
 	signer, err := keyFromACMECertificateProfilePayload(pl, rand.Reader)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed creating key for ACMECertificate payload: %w", err)
@@ -149,19 +160,19 @@ func newACMECertificateRequest(ctx context.Context, device *Device, pl *cfgprofi
 
 	// Once the client, account, private key and CSR are all ready,
 	// start the request for a new certificate.
-	acmeCerts, err := client.ObtainCertificateUsingCSR(ctx, account, csr)
+	acmeCertificateChains, err := client.ObtainCertificateUsingCSR(ctx, account, csr)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed obtaining certificate: %w", err)
 	}
-	if len(acmeCerts) == 0 {
+	if len(acmeCertificateChains) == 0 {
 		return nil, nil, errors.New("no certificates obtained")
 	}
 
 	// ACME servers should usually give you the entire certificate chain
-	// in PEM format. They can contain multiple chains.
-	acmeCert := acmeCerts[0]
-	log.Printf("[DEBUG] Certificate %q:\n%s\n\n", acmeCert.URL, acmeCert.ChainPEM)
-	chain, err := pemutil.ParseCertificateBundle(acmeCert.ChainPEM)
+	// in PEM format. The response can contain multiple chains.
+	acmeCertificateChain := acmeCertificateChains[0]
+	log.Printf("[DEBUG] Certificate %q:\n%s\n\n", acmeCertificateChain.URL, acmeCertificateChain.ChainPEM)
+	chain, err := pemutil.ParseCertificateBundle(acmeCertificateChain.ChainPEM)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed parsing certificate bundle: %w", err)
 	}
@@ -174,9 +185,9 @@ func newACMECertificateRequest(ctx context.Context, device *Device, pl *cfgprofi
 	}
 
 	// first cert in the chain is the new leaf
-	cert := chain[0]
+	certificate := chain[0]
 
-	return signer, cert, nil
+	return signer, certificate, nil
 }
 
 func createACMECSR(device *Device, pl *cfgprofiles.ACMECertificatePayload, key crypto.Signer) (*x509.CertificateRequest, error) {
@@ -185,7 +196,7 @@ func createACMECSR(device *Device, pl *cfgprofiles.ACMECertificatePayload, key c
 		PublicKey: key.Public(),
 	}
 
-	// set defualt to Digital Signature
+	// keyUsage defaults to Digital Signature
 	keyUsage := int(x509.KeyUsageDigitalSignature)
 	if pl.UsageFlags != 0 {
 		keyUsage = pl.UsageFlags
@@ -198,8 +209,12 @@ func createACMECSR(device *Device, pl *cfgprofiles.ACMECertificatePayload, key c
 	}
 	template.ExtraExtensions = append(template.ExtraExtensions, keyUsageExtn)
 
-	// pl.ExtendedKeyUsage // TODO: handle
-	// SubjectAltName (dns, email, NT, URI)
+	// add the ExtKeyUsage extension. CAs may not always respect this value.
+	extKeyUsageExtn, err := newExtendedKeyUsageExtension(pl.ExtendedKeyUsage)
+	if err != nil {
+		return nil, fmt.Errorf("failed creating ExtKeyUsage extension: %w", err)
+	}
+	template.ExtraExtensions = append(template.ExtraExtensions, extKeyUsageExtn)
 
 	// process the requested ACMECertificate Subject contents
 	for _, onvg := range pl.Subject {
@@ -238,17 +253,36 @@ func createACMECSR(device *Device, pl *cfgprofiles.ACMECertificatePayload, key c
 	// extract the type of ACME identifier to request for from the CSR, so it
 	// needs to be in there, unless we change the ACME client implementation
 	// to take the identifiers in a different way.
-	sans := []x509util.SubjectAlternativeName{}
+	san := pl.SubjectAltName
+	otherSANs := []x509util.SubjectAlternativeName{}
+	var dnsNames, emailAddresses []string
+	var uris []*url.URL
+	if san != nil {
+		dnsNames = x509util.MultiString(san.DNSNames)
+		emailAddresses = x509util.MultiString(san.RFC822Names)
+		for _, uri := range san.URIs {
+			u, err := url.Parse(uri)
+			if err != nil {
+				return nil, fmt.Errorf("failed parsing %q as URL: %w", uri, err)
+			}
+			uris = append(uris, u)
+		}
+		for _, pn := range san.NTPrincipals {
+			otherSANs = append(otherSANs, x509util.SubjectAlternativeName{
+				Type:  "1.3.6.1.4.1.311.20.2.3",   // User Principal Name / NTPrincipalName
+				Value: fmt.Sprintf("utf8:%s", pn), // e.g. utf8:test@example.com
+			})
+		}
+	}
 	permanentIdentifiers := []string{clientIdentifier}
 	for _, pi := range permanentIdentifiers {
-		sans = append(sans, x509util.SubjectAlternativeName{
+		otherSANs = append(otherSANs, x509util.SubjectAlternativeName{
 			Type:  x509util.PermanentIdentifierType,
 			Value: pi,
 		})
 	}
-	// TODO: more types of SANs from the ACMECertificate payload
 	subjectIsEmpty := template.Subject.CommonName == ""
-	ext, err := createSubjectAltNameExtension(nil, nil, nil, nil, sans, subjectIsEmpty)
+	ext, err := createSubjectAltNameExtension(dnsNames, emailAddresses, nil, uris, otherSANs, subjectIsEmpty)
 	if err != nil {
 		return nil, fmt.Errorf("failed creating SubjectAltName extension")
 	}
@@ -270,6 +304,25 @@ func createACMECSR(device *Device, pl *cfgprofiles.ACMECertificatePayload, key c
 	}
 
 	return csr, nil
+}
+
+func newExtendedKeyUsageExtension(extKeyUsageOIDs []string) (e pkix.Extension, err error) {
+	e.Id = asn1.ObjectIdentifier{2, 5, 29, 37}
+	oids := make([]asn1.ObjectIdentifier, len(extKeyUsageOIDs))
+	for i, u := range extKeyUsageOIDs {
+		parts := strings.Split(u, ".")
+		oid := []int{}
+		for _, p := range parts {
+			n, err := strconv.Atoi(p)
+			if err != nil {
+				return e, fmt.Errorf("failed parsing %q as OID: %w", u, err)
+			}
+			oid = append(oid, n)
+		}
+		oids[i] = oid // NOTE: this does not validate if the extKeyUsage OID is a known/registered one
+	}
+	e.Value, err = asn1.Marshal(oids)
+	return
 }
 
 // attSolver is a acmez.Solver that mimics the Apple attestation flow, backed

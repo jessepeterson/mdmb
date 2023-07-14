@@ -65,6 +65,10 @@ type ConnectRequest struct {
 // 	CommandUUID string
 // }
 
+func (c *MDMClient) MdmSignature(body []byte) (string, error) {
+	return c.mdmP7Sign(body)
+}
+
 // Generates "SignMessage" HTTP header data
 func (c *MDMClient) mdmP7Sign(body []byte) (string, error) {
 	if c.IdentityCertificate == nil || c.IdentityPrivateKey == nil {

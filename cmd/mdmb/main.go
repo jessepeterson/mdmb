@@ -33,7 +33,8 @@ func help(_ string, _ []string, _ RunContext, usage func()) {
 
 // RunContext contains "global" runtime environment settings
 type RunContext struct {
-	DB    *bolt.DB
+	DB *bolt.DB
+	// device UUIDs (UDIDs)
 	UUIDs []string
 }
 
@@ -47,6 +48,7 @@ func main() {
 		{"devices-profiles-list", "list device profiles", devicesProfilesList},
 		{"devices-profiles-install", "install profiles onto device (i.e. enroll)", devicesProfilesInstall},
 		{"devices-profiles-remove", "remove profiles from device", devicesProfilesRemove},
+		{"devices-mdm-signature", "Print Mdm-Signature header for device", devicesMdmSignature},
 		{"version", "display version", versionSubCmd},
 	}
 	f := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
@@ -309,6 +311,57 @@ func devicesProfilesList(name string, args []string, rctx RunContext, usage func
 		}
 		for _, uuid := range profileUUIDs {
 			fmt.Println(uuid)
+		}
+	}
+}
+
+func devicesMdmSignature(name string, args []string, rctx RunContext, usage func()) {
+	f := flag.NewFlagSet(name, flag.ExitOnError)
+	var (
+		file = f.String("f", "", "path to file to sign")
+	)
+	setSubCommandFlagSetUsage(f, usage)
+	f.Parse(args)
+
+	if *file == "" {
+		fmt.Fprintln(f.Output(), "must specify profile")
+		f.Usage()
+		os.Exit(2)
+	}
+
+	err := checkDeviceUUIDs(rctx, false, name)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	fileBytes, err := os.ReadFile(*file)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	for _, u := range rctx.UUIDs {
+		dev, err := device.Load(u, rctx.DB)
+		if err != nil {
+			log.Println(err)
+			continue
+		}
+
+		client, err := dev.MDMClient()
+		if err != nil {
+			log.Println(err)
+			continue
+		}
+
+		sig, err := client.MdmSignature(fileBytes)
+		if err != nil {
+			log.Println(err)
+			continue
+		}
+
+		if len(rctx.UUIDs) > 1 {
+			fmt.Printf("%s\t%s\n", dev.UDID, sig)
+		} else {
+			fmt.Println(sig)
 		}
 	}
 }

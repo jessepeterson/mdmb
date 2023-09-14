@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"flag"
 	"fmt"
@@ -13,6 +14,7 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/jessepeterson/mdmb/internal/attest"
 	"github.com/jessepeterson/mdmb/internal/device"
 	bolt "go.etcd.io/bbolt"
 )
@@ -137,7 +139,10 @@ func checkDeviceUUIDs(rctx RunContext, requireEmpty bool, subCmdName string) err
 func devicesProfilesInstall(name string, args []string, rctx RunContext, usage func()) {
 	f := flag.NewFlagSet(name, flag.ExitOnError)
 	var (
-		file = f.String("f", "", "profile to install")
+		file                     = f.String("f", "", "profile to install")
+		attestationCACertFile    = f.String("cert", "", "Path to the fake attestation CA certificate in PEM format")
+		attestationCAKeyFile     = f.String("key", "", "Path to the fake attestation CA private key")
+		attestationCAKeyPassword = f.String("pass", "", "Password for the fake attestation CA private key")
 	)
 	setSubCommandFlagSetUsage(f, usage)
 	f.Parse(args)
@@ -147,6 +152,14 @@ func devicesProfilesInstall(name string, args []string, rctx RunContext, usage f
 		f.Usage()
 		os.Exit(2)
 	}
+
+	aca, err := attest.New(*attestationCACertFile, *attestationCAKeyFile, *attestationCAKeyPassword)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	ctx := context.Background()
+	ctx = attest.Context(ctx, aca)
 
 	ep, err := ioutil.ReadFile(*file)
 	if err != nil {
@@ -166,7 +179,7 @@ func devicesProfilesInstall(name string, args []string, rctx RunContext, usage f
 			continue
 		}
 
-		err = dev.InstallProfile(ep)
+		err = dev.InstallProfile(ctx, ep)
 		if err != nil {
 			log.Println(err)
 			continue

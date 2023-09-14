@@ -1,6 +1,7 @@
 package device
 
 import (
+	"context"
 	"crypto/rand"
 	"errors"
 	"fmt"
@@ -159,6 +160,12 @@ func classifyAndSortProfilePayloads(p *cfgprofiles.Profile, ascending bool) []*p
 				Payload:              pl,
 				PayloadRequiresFlags: PayloadRequiresNetwork,
 			}
+		case *cfgprofiles.ACMECertificatePayload:
+			orderedPayloads[i] = &payloadAndResult{
+				CommonPayload:        &pl.Payload,
+				Payload:              pl,
+				PayloadRequiresFlags: PayloadRequiresNetwork,
+			}
 		case *cfgprofiles.MDMPayload:
 			orderedPayloads[i] = &payloadAndResult{
 				CommonPayload:        &pl.Payload,
@@ -185,15 +192,15 @@ func classifyAndSortProfilePayloads(p *cfgprofiles.Profile, ascending bool) []*p
 	return orderedPayloads
 }
 
-func (device *Device) InstallProfile(pb []byte) error {
-	return device.installProfile(pb, false)
+func (device *Device) InstallProfile(ctx context.Context, pb []byte) error {
+	return device.installProfile(ctx, pb, false)
 }
 
-func (device *Device) installProfileFromMDM(pb []byte) error {
-	return device.installProfile(pb, true)
+func (device *Device) installProfileFromMDM(ctx context.Context, pb []byte) error {
+	return device.installProfile(ctx, pb, true)
 }
 
-func (device *Device) installProfile(pb []byte, fromMDM bool) error {
+func (device *Device) installProfile(ctx context.Context, pb []byte, fromMDM bool) error {
 	if len(pb) == 0 {
 		return errors.New("empty profile")
 	}
@@ -234,6 +241,14 @@ func (device *Device) installProfile(pb []byte, fromMDM bool) error {
 			}
 			if pr.StringResult == "" {
 				return errors.New("no result from scep payload install")
+			}
+		case *cfgprofiles.ACMECertificatePayload:
+			pr.StringResult, err = device.installACMECertificatePayload(ctx, p.PayloadIdentifier, pl)
+			if err != nil {
+				return err
+			}
+			if pr.StringResult == "" {
+				return errors.New("no result from acme payload install")
 			}
 		case *cfgprofiles.MDMPayload:
 			pr.payloadAndResultRef = findpayloadAndResultByUUID(orderedPayloads, pl.IdentityCertificateUUID)
@@ -326,6 +341,45 @@ func (device *Device) installSCEPPayload(profileID string, scepPayload *cfgprofi
 	return kciID.UUID, nil
 }
 
+// installACMECertificatePayload performs an ACME certificate request and
+// returns the keychain identity UUID
+func (device *Device) installACMECertificatePayload(ctx context.Context, profileID string, acmePayload *cfgprofiles.ACMECertificatePayload) (string, error) {
+	// TODO: return more things, so that they can be persisted, such as ACME account key?
+	key, cert, err := newACMECertificateRequest(ctx, device, acmePayload)
+	if err != nil {
+		return "", err
+	}
+
+	kciKey := NewKeychainItem(device.SystemKeychain(), ClassKey)
+	kciKey.Key = key
+	err = kciKey.Save()
+	if err != nil {
+		return "", err
+	}
+
+	kciCert := NewKeychainItem(device.SystemKeychain(), ClassCertificate)
+	kciCert.Certificate = cert
+	err = kciCert.Save()
+	if err != nil {
+		return "", err
+	}
+
+	kciID := NewKeychainItem(device.SystemKeychain(), ClassIdentity)
+	kciID.IdentityKeyUUID = kciKey.UUID
+	kciID.IdentityCertificateUUID = kciCert.UUID
+	err = kciID.Save()
+	if err != nil {
+		return "", err
+	}
+
+	err = device.SystemProfileStore().savePayloadRefString(profileID, &acmePayload.Payload, "keychain_identity", kciID.UUID)
+	if err != nil {
+		return "", err
+	}
+
+	return kciID.UUID, nil
+}
+
 func (device *Device) RemoveProfile(profileID string) error {
 	p, err := device.SystemProfileStore().Load(profileID)
 	if err != nil {
@@ -337,6 +391,11 @@ func (device *Device) RemoveProfile(profileID string) error {
 		switch pl := pr.Payload.(type) {
 		case *cfgprofiles.SCEPPayload:
 			err = device.removeSCEPPayload(p.PayloadIdentifier, pl)
+			if err != nil {
+				fmt.Println(err)
+			}
+		case *cfgprofiles.ACMECertificatePayload:
+			err = device.removeACMECertificatePayload(p.PayloadIdentifier, pl)
 			if err != nil {
 				fmt.Println(err)
 			}
@@ -390,6 +449,50 @@ func (device *Device) removeSCEPPayload(profileID string, scepPayload *cfgprofil
 	}
 
 	err = device.SystemProfileStore().removePayloadRefString(profileID, &scepPayload.Payload, "keychain_identity")
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (device *Device) removeACMECertificatePayload(profileID string, acmePayload *cfgprofiles.ACMECertificatePayload) error {
+	refStr, err := device.SystemProfileStore().loadPayloadRefString(profileID, &acmePayload.Payload, "keychain_identity")
+	if err != nil {
+		return err
+	}
+
+	kciID, err := LoadKeychainItem(device.SystemKeychain(), refStr)
+	if err != nil {
+		return err
+	}
+
+	kciKey, err := LoadKeychainItem(device.SystemKeychain(), kciID.IdentityKeyUUID)
+	if err != nil {
+		return err
+	}
+
+	kciCert, err := LoadKeychainItem(device.SystemKeychain(), kciID.IdentityCertificateUUID)
+	if err != nil {
+		return err
+	}
+
+	err = kciCert.Delete()
+	if err != nil {
+		return err
+	}
+
+	err = kciKey.Delete()
+	if err != nil {
+		return err
+	}
+
+	err = kciID.Delete()
+	if err != nil {
+		return err
+	}
+
+	err = device.SystemProfileStore().removePayloadRefString(profileID, &acmePayload.Payload, "keychain_identity")
 	if err != nil {
 		return err
 	}

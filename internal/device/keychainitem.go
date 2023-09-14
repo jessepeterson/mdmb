@@ -1,9 +1,12 @@
 package device
 
 import (
+	"crypto"
+	"crypto/ecdsa"
 	"crypto/rsa"
 	"crypto/x509"
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/google/uuid"
@@ -28,7 +31,7 @@ type KeychainItem struct {
 	IdentityKeyUUID         string
 
 	// ClassKey
-	Key *rsa.PrivateKey
+	Key crypto.PrivateKey
 
 	// ClassCertificate
 	Certificate *x509.Certificate
@@ -48,7 +51,18 @@ func (kci *KeychainItem) encode() error {
 	case ClassCertificate:
 		kci.Item = kci.Certificate.Raw
 	case ClassKey:
-		kci.Item = x509.MarshalPKCS1PrivateKey(kci.Key)
+		switch key := kci.Key.(type) {
+		case *rsa.PrivateKey:
+			kci.Item = x509.MarshalPKCS1PrivateKey(key)
+		case *ecdsa.PrivateKey:
+			b, err := x509.MarshalECPrivateKey(key)
+			if err != nil {
+				return err
+			}
+			kci.Item = b
+		default:
+			return fmt.Errorf("unsupported type: %T", key)
+		}
 	case ClassIdentity:
 		if kci.IdentityCertificateUUID == "" || kci.IdentityKeyUUID == "" {
 			return errors.New("must provide UUIDs for key and cert for identity keychain item")
@@ -70,10 +84,15 @@ func (kci *KeychainItem) decode() error {
 			return err
 		}
 	case ClassKey:
-		kci.Key, err = x509.ParsePKCS1PrivateKey(kci.Item)
+		var key crypto.PrivateKey
+		key, err := x509.ParsePKCS1PrivateKey(kci.Item) // try parsing an RSA private key first
 		if err != nil {
-			return err
+			key, err = x509.ParseECPrivateKey(kci.Item) // if it fails, try parsing as an ECDSA key
+			if err != nil {
+				return err
+			}
 		}
+		kci.Key = key
 	case ClassIdentity:
 		split := strings.Split(string(kci.Item), ",")
 		if len(split) != 2 {

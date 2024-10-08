@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"flag"
 	"fmt"
@@ -31,11 +32,26 @@ func help(_ string, _ []string, _ RunContext, usage func()) {
 	usage()
 }
 
+type DeviceBag interface {
+	// List returns the list of device UDIDs.
+	List(context.Context) ([]string, error)
+}
+
 // RunContext contains "global" runtime environment settings
 type RunContext struct {
-	DB *bolt.DB
+	Context context.Context
+	DB      *bolt.DB
 	// device UUIDs (UDIDs)
 	UUIDs []string
+	Bag   DeviceBag
+}
+
+type devicePkgBag struct {
+	db *bolt.DB
+}
+
+func (b *devicePkgBag) List(context.Context) ([]string, error) {
+	return device.List(b.db)
 }
 
 func main() {
@@ -83,12 +99,16 @@ func main() {
 
 	mathrand.Seed(time.Now().UnixNano())
 
-	rctx := RunContext{DB: db}
+	rctx := RunContext{
+		Context: context.Background(),
+		DB:      db,
+		Bag:     &devicePkgBag{db: db},
+	}
 
 	if *uuids != "" {
 		if *uuids == "all" {
 			var err error
-			rctx.UUIDs, err = device.List(rctx.DB)
+			rctx.UUIDs, err = rctx.Bag.List(rctx.Context)
 			if err != nil {
 				log.Fatal(err)
 			}
@@ -166,7 +186,7 @@ func devicesProfilesInstall(name string, args []string, rctx RunContext, usage f
 			continue
 		}
 
-		err = dev.InstallProfile(ep)
+		err = dev.InstallProfile(rctx.Context, ep)
 		if err != nil {
 			log.Println(err)
 			continue
@@ -180,7 +200,7 @@ func devicesList(name string, args []string, rctx RunContext, usage func()) {
 		log.Fatal(err)
 	}
 
-	uuids, err := device.List(rctx.DB)
+	uuids, err := rctx.Bag.List(rctx.Context)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -245,7 +265,7 @@ func devicesTokenUpdate(name string, args []string, rctx RunContext, usage func(
 			continue
 		}
 
-		err = client.TokenUpdate(*number)
+		err = client.TokenUpdate(rctx.Context, *number)
 		if err != nil {
 			log.Println(err)
 		}
@@ -287,7 +307,7 @@ func devicesConnect(name string, args []string, rctx RunContext, usage func()) {
 		})
 	}
 
-	startConnectWorkers(workerData, *workers, *iterations)
+	startConnectWorkers(rctx.Context, workerData, *workers, *iterations)
 }
 
 func devicesProfilesList(name string, args []string, rctx RunContext, usage func()) {
@@ -352,7 +372,7 @@ func devicesMdmSignature(name string, args []string, rctx RunContext, usage func
 			continue
 		}
 
-		sig, err := client.MdmSignature(fileBytes)
+		sig, err := client.MdmSignature(rctx.Context, fileBytes)
 		if err != nil {
 			log.Println(err)
 			continue

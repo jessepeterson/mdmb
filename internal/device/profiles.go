@@ -1,6 +1,7 @@
 package device
 
 import (
+	"context"
 	"crypto/rand"
 	"errors"
 	"fmt"
@@ -185,15 +186,15 @@ func classifyAndSortProfilePayloads(p *cfgprofiles.Profile, ascending bool) []*p
 	return orderedPayloads
 }
 
-func (device *Device) InstallProfile(pb []byte) error {
-	return device.installProfile(pb, false)
+func (device *Device) InstallProfile(ctx context.Context, pb []byte) error {
+	return device.installProfile(ctx, pb, false)
 }
 
-func (device *Device) installProfileFromMDM(pb []byte) error {
-	return device.installProfile(pb, true)
+func (device *Device) installProfileFromMDM(ctx context.Context, pb []byte) error {
+	return device.installProfile(ctx, pb, true)
 }
 
-func (device *Device) installProfile(pb []byte, fromMDM bool) error {
+func (device *Device) installProfile(ctx context.Context, pb []byte, fromMDM bool) error {
 	if len(pb) == 0 {
 		return errors.New("empty profile")
 	}
@@ -228,7 +229,7 @@ func (device *Device) installProfile(pb []byte, fromMDM bool) error {
 	for _, pr := range orderedPayloads {
 		switch pl := pr.Payload.(type) {
 		case *cfgprofiles.SCEPPayload:
-			pr.StringResult, err = device.installSCEPPayload(p.PayloadIdentifier, pl)
+			pr.StringResult, err = device.installSCEPPayload(ctx, p.PayloadIdentifier, pl)
 			if err != nil {
 				return err
 			}
@@ -247,7 +248,7 @@ func (device *Device) installProfile(pb []byte, fromMDM bool) error {
 			device.MDMIdentityKeychainUUID = pr.payloadAndResultRef.StringResult
 			device.Save()
 
-			err = device.installMDMPayload(pl, p.PayloadIdentifier)
+			err = device.installMDMPayload(ctx, pl, p.PayloadIdentifier)
 			if err != nil {
 				return err
 			}
@@ -259,12 +260,12 @@ func (device *Device) installProfile(pb []byte, fromMDM bool) error {
 	return device.SystemProfileStore().persistProfile(pb, p.PayloadIdentifier)
 }
 
-func (device *Device) installMDMPayload(mdmPayload *cfgprofiles.MDMPayload, profileID string) error {
+func (device *Device) installMDMPayload(ctx context.Context, mdmPayload *cfgprofiles.MDMPayload, profileID string) error {
 	c, err := newMDMClientUsingPayload(device, mdmPayload)
 	if err != nil {
 		return err
 	}
-	err = c.enroll(profileID)
+	err = c.enroll(ctx, profileID)
 	if err != nil {
 		return err
 	}
@@ -274,7 +275,7 @@ func (device *Device) installMDMPayload(mdmPayload *cfgprofiles.MDMPayload, prof
 }
 
 // installSCEPPayload ... and returns the keychain identity UUID
-func (device *Device) installSCEPPayload(profileID string, scepPayload *cfgprofiles.SCEPPayload) (string, error) {
+func (device *Device) installSCEPPayload(ctx context.Context, profileID string, scepPayload *cfgprofiles.SCEPPayload) (string, error) {
 	key, err := keyFromSCEPProfilePayload(scepPayload, rand.Reader)
 	if err != nil {
 		return "", err
@@ -286,6 +287,7 @@ func (device *Device) installSCEPPayload(profileID string, scepPayload *cfgprofi
 	}
 
 	cert, err := scepNewPKCSReq(
+		ctx,
 		csrBytes,
 		scepPayload.PayloadContent.URL,
 		scepPayload.PayloadContent.Challenge,

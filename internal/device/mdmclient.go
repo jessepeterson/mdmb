@@ -1,11 +1,14 @@
 package device
 
 import (
+	"context"
+	"crypto"
 	"crypto/rsa"
 	"crypto/x509"
 	"errors"
 
 	"github.com/jessepeterson/cfgprofiles"
+	"github.com/jessepeterson/mdmb/protocol"
 )
 
 type MDMClient struct {
@@ -14,6 +17,8 @@ type MDMClient struct {
 
 	IdentityCertificate *x509.Certificate
 	IdentityPrivateKey  *rsa.PrivateKey
+
+	transport *protocol.Transport
 
 	notNow bool
 }
@@ -45,7 +50,27 @@ func (c *MDMClient) loadIdentityFromKeychain(uuid string) error {
 func newMDMClientUsingPayload(device *Device, mdmPld *cfgprofiles.MDMPayload) (*MDMClient, error) {
 	c := &MDMClient{Device: device, MDMPayload: mdmPld}
 	err := c.loadIdentityFromKeychain(device.MDMIdentityKeychainUUID)
+	if err == nil {
+		c.configureTransport()
+	}
 	return c, err
+}
+
+func (c *MDMClient) configureTransport() {
+	if c == nil {
+		return
+	}
+	// setup transport
+	tOpts := []protocol.TransportOption{
+		protocol.WithIdentityProvider(func(context.Context) (*x509.Certificate, crypto.PrivateKey, error) {
+			return c.IdentityCertificate, c.IdentityPrivateKey, nil
+		}),
+		protocol.WithMDMURLs(c.MDMPayload.ServerURL, c.MDMPayload.CheckInURL),
+	}
+	if c.MDMPayload.SignMessage {
+		tOpts = append(tOpts, protocol.WithSignMessage())
+	}
+	c.transport = protocol.NewTransport(tOpts...)
 }
 
 func (c *MDMClient) loadMDMPayload(profileID string) error {
@@ -80,10 +105,11 @@ func newMDMClient(device *Device) (*MDMClient, error) {
 	if !c.enrolled() {
 		return c, errors.New("device not enrolled")
 	}
+	c.configureTransport()
 	return c, nil
 }
 
-func (c *MDMClient) enroll(profileID string) error {
+func (c *MDMClient) enroll(ctx context.Context, profileID string) error {
 	if c.MDMPayload == nil {
 		return errors.New("no MDM payload")
 	}
@@ -91,12 +117,12 @@ func (c *MDMClient) enroll(profileID string) error {
 		return errors.New("non-SignMessage (mTLS) enrollment not supported")
 	}
 
-	err := c.authenticate()
+	err := c.authenticate(ctx)
 	if err != nil {
 		return err
 	}
 
-	err = c.TokenUpdate("")
+	err = c.TokenUpdate(ctx, "")
 	if err != nil {
 		return err
 	}

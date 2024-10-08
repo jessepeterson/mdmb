@@ -15,15 +15,13 @@ import (
 	"fmt"
 	"io"
 	"math/big"
-	"os"
 	"strings"
 	"time"
 
-	"github.com/go-kit/kit/log"
 	"github.com/jessepeterson/cfgprofiles"
-	scepclient "github.com/micromdm/scep/v2/client"
-	"github.com/micromdm/scep/v2/cryptoutil/x509util"
-	"github.com/micromdm/scep/v2/scep"
+	mdmbscepclient "github.com/jessepeterson/mdmb/scepclient"
+	"github.com/smallstep/scep"
+	"github.com/smallstep/scep/x509util"
 )
 
 const defaultRSAKeySize = 1024
@@ -185,34 +183,10 @@ func selfSign() (*rsa.PrivateKey, *x509.Certificate, error) {
 	return priv, cert, err
 }
 
-func scepNewPKCSReq(csrBytes []byte, url, challenge, caMessage string, fingerprint []byte) (*x509.Certificate, error) {
-	logger := log.NewLogfmtLogger(os.Stderr)
-	logger = log.With(logger, "ts", log.DefaultTimestampUTC)
-	cl, err := scepclient.New(url, logger)
-	if err != nil {
-		return nil, err
+func scepCertsSelector(fingerprint []byte) (scep.CertsSelector, error) {
+	if len(fingerprint) < 1 {
+		return scep.NopCertsSelector(), nil
 	}
-	ctx := context.Background()
-	resp, certNum, err := cl.GetCACert(ctx, caMessage)
-	if err != nil {
-		return nil, err
-	}
-	var certs []*x509.Certificate
-	{
-		if certNum > 1 {
-			certs, err = scep.CACerts(resp)
-			if err != nil {
-				return nil, err
-			}
-		} else {
-			certs, err = x509.ParseCertificates(resp)
-			if err != nil {
-				return nil, err
-			}
-		}
-	}
-
-	selector := scep.NopCertsSelector()
 	hashType := crypto.Hash(0)
 	switch len(fingerprint) {
 	case 16:
@@ -221,60 +195,36 @@ func scepNewPKCSReq(csrBytes []byte, url, challenge, caMessage string, fingerpri
 		hashType = crypto.SHA1
 	case 32:
 		hashType = crypto.SHA256
+	default:
+		return nil, fmt.Errorf("unsupported scep fingerprint length: %d", len(fingerprint))
 	}
-	if hashType != 0 {
-		selector = scep.FingerprintCertsSelector(hashType, fingerprint)
-	} else {
-		fmt.Printf("CAFingerprint length %d not supported\n", len(fingerprint))
-	}
+	return scep.FingerprintCertsSelector(hashType, fingerprint), nil
+}
 
-	scepTmpKey, scepTmpCert, err := selfSign()
+func scepNewPKCSReq(ctx context.Context, csrBytes []byte, url, _, caMessage string, fingerprint []byte) (*x509.Certificate, error) {
+	selector, err := scepCertsSelector(fingerprint)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("scep cert selector: %w", err)
 	}
 
-	tmpl := &scep.PKIMessage{
-		MessageType: scep.PKCSReq,
-		Recipients:  certs,
-		SignerKey:   scepTmpKey,
-		SignerCert:  scepTmpCert,
+	c, err := mdmbscepclient.New(url, mdmbscepclient.WithSignerKeypair(func(context.Context) (*x509.Certificate, *rsa.PrivateKey, error) {
+		key, cert, err := selfSign()
+		return cert, key, err
+	}))
+	if err != nil {
+		return nil, fmt.Errorf("creating scep client: %w", err)
 	}
 
-	if challenge != "" {
-		tmpl.CSRReqMessage = &scep.CSRReqMessage{
-			ChallengePassword: challenge,
-		}
-	}
-
+	// re-parse the x509util CertificateRequest (which now contains any challenge password)
 	csr, err := x509.ParseCertificateRequest(csrBytes)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("parsing csr: %w", err)
 	}
 
-	msg, err := scep.NewCSRRequest(csr, tmpl, scep.WithLogger(logger), scep.WithCertsSelector(selector))
+	cert, err := c.FullSign(ctx, csr, []byte(caMessage), selector)
 	if err != nil {
-		return nil, fmt.Errorf("creating csr pkiMessage: %w", err)
+		return nil, fmt.Errorf("scep: %w", err)
 	}
 
-	respBytes, err := cl.PKIOperation(ctx, msg.Raw)
-	if err != nil {
-		return nil, fmt.Errorf("PKIOperation for PKCSReq: %w", err)
-	}
-
-	respMsg, err := scep.ParsePKIMessage(respBytes, scep.WithLogger(logger), scep.WithCACerts(msg.Recipients))
-	if err != nil {
-		return nil, fmt.Errorf("PKCSReq parsing pkiMessage response: %w", err)
-	}
-
-	if respMsg.PKIStatus != scep.SUCCESS {
-		return nil, fmt.Errorf("PKCSReq request failed, failInfo: %s", respMsg.FailInfo)
-	}
-
-	logger.Log("pkiStatus", "SUCCESS", "msg", "server returned a certificate.")
-
-	if err := respMsg.DecryptPKIEnvelope(scepTmpCert, scepTmpKey); err != nil {
-		return nil, fmt.Errorf("PKCSReq decrypt pkiEnvelope: %s: %w", respMsg.PKIStatus, err)
-	}
-
-	return respMsg.CertRepMessage.Certificate, nil
+	return cert, nil
 }

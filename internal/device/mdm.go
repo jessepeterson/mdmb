@@ -2,18 +2,16 @@ package device
 
 import (
 	"bytes"
-	"encoding/base64"
+	"context"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
-	"net/http"
 
 	"github.com/groob/plist"
-	"go.mozilla.org/pkcs7"
 )
 
-func (c *MDMClient) authenticate() error {
+func (c *MDMClient) authenticate(ctx context.Context) error {
 	ar := &AuthenticationRequest{
 		DeviceName:  c.Device.ComputerName,
 		MessageType: "Authenticate",
@@ -24,7 +22,7 @@ func (c *MDMClient) authenticate() error {
 		SerialNumber: c.Device.Serial,
 	}
 
-	return c.checkinRequest(ar)
+	return c.checkinRequest(ctx, ar)
 }
 
 // AuthenticationRequest ...
@@ -65,26 +63,8 @@ type ConnectRequest struct {
 // 	CommandUUID string
 // }
 
-func (c *MDMClient) MdmSignature(body []byte) (string, error) {
-	return c.mdmP7Sign(body)
-}
-
-// Generates "SignMessage" HTTP header data
-func (c *MDMClient) mdmP7Sign(body []byte) (string, error) {
-	if c.IdentityCertificate == nil || c.IdentityPrivateKey == nil {
-		return "", errors.New("device identity invalid")
-	}
-	signedData, err := pkcs7.NewSignedData(body)
-	if err != nil {
-		return "", err
-	}
-	signedData.AddSigner(c.IdentityCertificate, c.IdentityPrivateKey, pkcs7.SignerInfoConfig{})
-	signedData.Detach()
-	sig, err := signedData.Finish()
-	if err != nil {
-		return "", err
-	}
-	return base64.StdEncoding.EncodeToString(sig), nil
+func (c *MDMClient) MdmSignature(ctx context.Context, body []byte) (string, error) {
+	return c.transport.SignMessage(ctx, body)
 }
 
 type TokenUpdateRequest struct {
@@ -103,49 +83,35 @@ type TokenUpdateRequest struct {
 	UserLongName          string `plist:",omitempty"`
 }
 
-func (c *MDMClient) checkinRequest(i interface{}) error {
-	plistBytes, err := plist.Marshal(i)
+// PlistReader encodes i into XML Plist and returns a reader.
+func PlistReader(i interface{}) (io.Reader, error) {
+	buf := new(bytes.Buffer)
+	enc := plist.NewEncoder(buf)
+	enc.Indent("\t")
+	err := enc.Encode(i)
+	return buf, err
+}
+
+func (c *MDMClient) checkinRequest(ctx context.Context, i interface{}) error {
+	r, err := PlistReader(i)
 	if err != nil {
 		return err
 	}
 
-	mdmSig, err := c.mdmP7Sign(plistBytes)
+	resp, err := c.transport.DoCheckIn(ctx, r)
 	if err != nil {
 		return err
 	}
+	defer resp.Body.Close()
 
-	ciURL := c.MDMPayload.CheckInURL
-	if ciURL == "" {
-		ciURL = c.MDMPayload.ServerURL
-	}
-
-	client := &http.Client{}
-	req, err := http.NewRequest("PUT", ciURL, bytes.NewReader(plistBytes))
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Mdm-Signature", mdmSig)
-	req.Header.Set("Content-Type", "application/x-apple-aspen-mdm-checkin")
-
-	res, err := client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer res.Body.Close()
-
-	_, err = ioutil.ReadAll(res.Body)
-	if err != nil {
-		return err
-	}
-
-	if res.StatusCode != 200 {
-		return fmt.Errorf("Checkin request failed with HTTP status: %d", res.StatusCode)
+	if resp.StatusCode != 200 {
+		return fmt.Errorf("checkin request failed with HTTP status: %s", resp.Status)
 	}
 
 	return nil
 }
 
-func (c *MDMClient) TokenUpdate(addl string) error {
+func (c *MDMClient) TokenUpdate(ctx context.Context, addl string) error {
 	tu := &TokenUpdateRequest{
 		MessageType: "TokenUpdate",
 		PushMagic:   "fakePushMagic" + addl,
@@ -153,7 +119,7 @@ func (c *MDMClient) TokenUpdate(addl string) error {
 		Topic:       c.MDMPayload.Topic,
 		UDID:        c.Device.UDID,
 	}
-	return c.checkinRequest(tu)
+	return c.checkinRequest(ctx, tu)
 }
 
 type ConnectResponseCommand struct {
@@ -165,53 +131,37 @@ type ConnectResponse struct {
 	CommandUUID string
 }
 
-func (c *MDMClient) Connect() error {
+func (c *MDMClient) Connect(ctx context.Context) error {
 	req := &ConnectRequest{
 		UDID:   c.Device.UDID,
 		Status: "Idle",
 	}
-	client := &http.Client{}
-	return c.connect(client, req)
+	return c.connect(ctx, req)
 }
 
-func httpRequestBytes(client *http.Client, req *http.Request) (bytes []byte, res *http.Response, err error) {
-	res, err = client.Do(req)
-	if err != nil {
-		return
-	}
-	defer res.Body.Close()
-	bytes, err = ioutil.ReadAll(res.Body)
-	return
-}
-
-func (c *MDMClient) connect(client *http.Client, connReq interface{}) error {
+func (c *MDMClient) connect(ctx context.Context, connReq interface{}) error {
 	if !c.enrolled() {
 		return errors.New("device not enrolled")
 	}
 
-	plistBytes, err := plist.Marshal(connReq)
+	r, err := PlistReader(connReq)
 	if err != nil {
 		return err
 	}
 
-	mdmSig, err := c.mdmP7Sign(plistBytes)
+	res, err := c.transport.DoReportResultsAndFetchNextCommand(ctx, r)
 	if err != nil {
 		return err
 	}
+	defer res.Body.Close()
 
-	req, err := http.NewRequest("PUT", c.MDMPayload.ServerURL, bytes.NewReader(plistBytes))
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Mdm-Signature", mdmSig)
-
-	respBytes, res, err := httpRequestBytes(client, req)
+	respBytes, err := io.ReadAll(res.Body)
 	if err != nil {
 		return err
 	}
 
 	if res.StatusCode != 200 {
-		return fmt.Errorf("Connect Request failed with HTTP status: %d", res.StatusCode)
+		return fmt.Errorf("connect request failed with HTTP status: %s", res.Status)
 	}
 
 	if len(respBytes) == 0 {
@@ -224,7 +174,7 @@ func (c *MDMClient) connect(client *http.Client, connReq interface{}) error {
 		return err
 	}
 
-	nextConnReq, err := c.handleMDMCommand(resp.Command.RequestType, resp.CommandUUID, respBytes)
+	nextConnReq, err := c.handleMDMCommand(ctx, resp.Command.RequestType, resp.CommandUUID, respBytes)
 	if err != nil {
 		log.Println(err)
 		nextConnReq = &ConnectRequest{
@@ -259,5 +209,5 @@ func (c *MDMClient) connect(client *http.Client, connReq interface{}) error {
 		}
 	}
 
-	return c.connect(client, nextConnReq)
+	return c.connect(ctx, nextConnReq)
 }

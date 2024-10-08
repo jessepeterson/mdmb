@@ -1,6 +1,7 @@
 package device
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -8,7 +9,7 @@ import (
 	"github.com/jessepeterson/cfgprofiles"
 )
 
-func (c *MDMClient) handleMDMCommand(reqType, commandUUID string, respBytes []byte) (interface{}, error) {
+func (c *MDMClient) handleMDMCommand(ctx context.Context, reqType, commandUUID string, respBytes []byte) (interface{}, error) {
 	if c.notNow {
 		return &ConnectRequest{
 			UDID:        c.Device.UDID,
@@ -24,7 +25,7 @@ func (c *MDMClient) handleMDMCommand(reqType, commandUUID string, respBytes []by
 	case "ProfileList":
 		return c.handleProfileList(reqType, commandUUID)
 	case "InstallProfile":
-		return c.handleInstallProfile(respBytes)
+		return c.handleInstallProfile(ctx, respBytes)
 	default:
 		fmt.Printf("MDM command not handled: %s UUID %s\n", reqType, commandUUID)
 		return &ConnectRequest{
@@ -186,13 +187,13 @@ type InstallProfileResponse struct {
 	RequestType string
 }
 
-func (c *MDMClient) handleInstallProfile(respBytes []byte) (interface{}, error) {
+func (c *MDMClient) handleInstallProfile(ctx context.Context, respBytes []byte) (interface{}, error) {
 	cmd := &InstallProfile{}
 	err := plist.Unmarshal(respBytes, cmd)
 	if err != nil {
 		return nil, err
 	}
-	err = c.Device.installProfileFromMDM(cmd.Command.Payload)
+	err = c.Device.installProfileFromMDM(ctx, cmd.Command.Payload)
 	if err != nil {
 		return nil, err
 	}

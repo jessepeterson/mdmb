@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log"
@@ -18,14 +19,14 @@ type ConnectWorkerData struct {
 	MDMClient *device.MDMClient
 }
 
-func connectWork(cwd *ConnectWorkerData) error {
+func connectWork(ctx context.Context, cwd *ConnectWorkerData) error {
 	if cwd.MDMClient == nil || cwd.Device == nil {
 		return errors.New("invalid mdm client or device")
 	}
-	return cwd.MDMClient.Connect()
+	return cwd.MDMClient.Connect(ctx)
 }
 
-func startConnectWorkers(cwds []*ConnectWorkerData, workers, iterations int) {
+func startConnectWorkers(ctx context.Context, cwds []*ConnectWorkerData, workers, iterations int) {
 	var wg sync.WaitGroup
 	queue := make(chan *ConnectWorkerData, workers)
 	var (
@@ -44,7 +45,7 @@ func startConnectWorkers(cwds []*ConnectWorkerData, workers, iterations int) {
 			for cwd := range queue {
 				totalCt++
 				started := time.Now()
-				err := connectWork(cwd)
+				err := connectWork(ctx, cwd)
 				d := time.Since(started)
 				durrVals[totalCt-1] = d
 				if err != nil {

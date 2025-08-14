@@ -65,7 +65,9 @@ func (kci *KeychainItem) decode() error {
 	var err error
 	switch kci.Class {
 	case ClassCertificate:
-		kci.Certificate, err = x509.ParseCertificate(kci.Item)
+		rawCopy := make([]byte, len(kci.Item))
+		copy(rawCopy, kci.Item)
+		kci.Certificate, err = x509.ParseCertificate(rawCopy)
 		if err != nil {
 			return err
 		}

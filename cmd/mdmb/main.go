@@ -196,9 +196,7 @@ func devicesProfilesInstall(name string, args []string, rctx RunContext, usage f
 
 func devicesList(name string, args []string, rctx RunContext, usage func()) {
 	f := flag.NewFlagSet(name, flag.ExitOnError)
-	var (
-		showSerial = f.Bool("show-serials", false, "show device serial number")
-	)
+	showSerials := f.Bool("show-serials", false, "show device serial numbers")
 	setSubCommandFlagSetUsage(f, usage)
 	f.Parse(args)
 
@@ -213,7 +211,7 @@ func devicesList(name string, args []string, rctx RunContext, usage func()) {
 	}
 
 	for _, v := range uuids {
-		if *showSerial {
+		if *showSerials {
 			dev, err := device.Load(v, rctx.DB)
 			if err != nil {
 				log.Println(err)

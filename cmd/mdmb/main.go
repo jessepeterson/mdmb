@@ -14,8 +14,10 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/jessepeterson/mdmb/internal/device"
 	bolt "go.etcd.io/bbolt"
+
+	"github.com/jessepeterson/mdmb/internal/attest"
+	"github.com/jessepeterson/mdmb/internal/device"
 )
 
 var version = "unknown"
@@ -39,8 +41,10 @@ type DeviceBag interface {
 
 // RunContext contains "global" runtime environment settings
 type RunContext struct {
-	Context context.Context
-	DB      *bolt.DB
+	Context       context.Context
+	DB            *bolt.DB
+	AttestationCA *attest.CA
+
 	// device UUIDs (UDIDs)
 	UUIDs []string
 	Bag   DeviceBag
@@ -157,7 +161,10 @@ func checkDeviceUUIDs(rctx RunContext, requireEmpty bool, subCmdName string) err
 func devicesProfilesInstall(name string, args []string, rctx RunContext, usage func()) {
 	f := flag.NewFlagSet(name, flag.ExitOnError)
 	var (
-		file = f.String("f", "", "profile to install")
+		file                     = f.String("f", "", "profile to install")
+		attestationCACertFile    = f.String("cert", "", "Path to the fake attestation CA certificate in PEM format")
+		attestationCAKeyFile     = f.String("key", "", "Path to the fake attestation CA private key")
+		attestationCAKeyPassword = f.String("pass", "", "Password for the fake attestation CA private key")
 	)
 	setSubCommandFlagSetUsage(f, usage)
 	f.Parse(args)
@@ -167,6 +174,13 @@ func devicesProfilesInstall(name string, args []string, rctx RunContext, usage f
 		f.Usage()
 		os.Exit(2)
 	}
+
+	attestationCA, err := attest.New(*attestationCACertFile, *attestationCAKeyFile, *attestationCAKeyPassword)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	rctx.AttestationCA = attestationCA
 
 	ep, err := ioutil.ReadFile(*file)
 	if err != nil {
@@ -180,7 +194,7 @@ func devicesProfilesInstall(name string, args []string, rctx RunContext, usage f
 
 	for _, u := range rctx.UUIDs {
 		fmt.Println(u)
-		dev, err := device.Load(u, rctx.DB)
+		dev, err := device.Load(u, rctx.DB, rctx.AttestationCA)
 		if err != nil {
 			log.Println(err)
 			continue
@@ -267,7 +281,7 @@ func devicesTokenUpdate(name string, args []string, rctx RunContext, usage func(
 	for _, u := range rctx.UUIDs {
 		fmt.Println(u)
 
-		dev, err := device.Load(u, rctx.DB)
+		dev, err := device.Load(u, rctx.DB, nil)
 		if err != nil {
 			log.Println(err)
 			continue
@@ -303,7 +317,7 @@ func devicesConnect(name string, args []string, rctx RunContext, usage func()) {
 	workerData := []*ConnectWorkerData{}
 
 	for _, u := range rctx.UUIDs {
-		dev, err := device.Load(u, rctx.DB)
+		dev, err := device.Load(u, rctx.DB, nil)
 		if err != nil {
 			log.Println(err)
 			continue
@@ -332,7 +346,7 @@ func devicesProfilesList(name string, args []string, rctx RunContext, usage func
 
 	for _, u := range rctx.UUIDs {
 		fmt.Printf("profiles for UUID: %s\n", u)
-		dev, err := device.Load(u, rctx.DB)
+		dev, err := device.Load(u, rctx.DB, nil)
 		if err != nil {
 			log.Println(err)
 			continue
@@ -374,7 +388,7 @@ func devicesMdmSignature(name string, args []string, rctx RunContext, usage func
 	}
 
 	for _, u := range rctx.UUIDs {
-		dev, err := device.Load(u, rctx.DB)
+		dev, err := device.Load(u, rctx.DB, nil)
 		if err != nil {
 			log.Println(err)
 			continue
@@ -421,7 +435,7 @@ func devicesProfilesRemove(name string, args []string, rctx RunContext, usage fu
 
 	for _, u := range rctx.UUIDs {
 		fmt.Println(u)
-		dev, err := device.Load(u, rctx.DB)
+		dev, err := device.Load(u, rctx.DB, nil)
 		if err != nil {
 			log.Println(err)
 			continue

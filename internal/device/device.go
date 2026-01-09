@@ -6,6 +6,8 @@ import (
 
 	"github.com/google/uuid"
 	bolt "go.etcd.io/bbolt"
+
+	"github.com/jessepeterson/mdmb/internal/attest"
 )
 
 // Device represents a pseudo Apple device for MDM interactions
@@ -17,7 +19,8 @@ type Device struct {
 	MDMIdentityKeychainUUID string
 	MDMProfileIdentifier    string
 
-	boltDB *bolt.DB
+	boltDB        *bolt.DB
+	attestationCA *attest.CA
 
 	sysKeychain     *Keychain
 	sysProfileStore *ProfileStore

@@ -3,7 +3,6 @@ package device
 import (
 	"context"
 	"crypto"
-	"crypto/rsa"
 	"crypto/x509"
 	"errors"
 
@@ -16,7 +15,7 @@ type MDMClient struct {
 	MDMPayload *cfgprofiles.MDMPayload
 
 	IdentityCertificate *x509.Certificate
-	IdentityPrivateKey  *rsa.PrivateKey
+	IdentityPrivateKey  crypto.PrivateKey
 
 	transport *protocol.Transport
 

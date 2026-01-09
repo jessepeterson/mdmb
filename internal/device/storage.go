@@ -4,6 +4,8 @@ import (
 	"errors"
 
 	bolt "go.etcd.io/bbolt"
+
+	"github.com/jessepeterson/mdmb/internal/attest"
 )
 
 func (device *Device) validDevice() bool {
@@ -33,8 +35,8 @@ func (device *Device) Save() error {
 }
 
 // Load a device from bolt DB storage
-func Load(udid string, db *bolt.DB) (device *Device, err error) {
-	device = &Device{UDID: udid, boltDB: db}
+func Load(udid string, db *bolt.DB, attestationCA *attest.CA) (device *Device, err error) {
+	device = &Device{UDID: udid, boltDB: db, attestationCA: attestationCA}
 	err = db.View(func(tx *bolt.Tx) error {
 		device.Serial = BucketGetString(tx, "device_serial", udid)
 		if device.Serial == "" {

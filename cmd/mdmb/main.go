@@ -228,6 +228,9 @@ func devicesCreate(name string, args []string, rctx RunContext, usage func()) {
 	f := flag.NewFlagSet(name, flag.ExitOnError)
 	var (
 		number = f.Int("n", 1, "number of devices")
+		buildVersion = f.String("build-version", "", "build version (e.g. 24E263)")
+		osVersion    = f.String("os-version", "", "OS version (e.g. 15.4)")
+		productName  = f.String("product-name", "", "product name (e.g. Mac16,10)")
 	)
 	setSubCommandFlagSetUsage(f, usage)
 	f.Parse(args)
@@ -240,6 +243,15 @@ func devicesCreate(name string, args []string, rctx RunContext, usage func()) {
 	fmt.Printf("creating %d device(s)\n", *number)
 	for i := 0; i < *number; i++ {
 		d := device.New("", rctx.DB)
+		if *buildVersion != "" {
+			d.BuildVersion = *buildVersion
+		}
+		if *osVersion != "" {
+			d.OSVersion = *osVersion
+		}
+		if *productName != "" {
+			d.ProductName = *productName
+		}
 		err := d.Save()
 		if err != nil {
 			log.Fatal(err)

@@ -17,6 +17,10 @@ type Device struct {
 	MDMIdentityKeychainUUID string
 	MDMProfileIdentifier    string
 
+	BuildVersion string
+	OSVersion    string
+	ProductName  string
+
 	boltDB *bolt.DB
 
 	sysKeychain     *Keychain
@@ -30,6 +34,9 @@ func New(name string, db *bolt.DB) *Device {
 		ComputerName: name,
 		Serial:       randSerial(),
 		UDID:         strings.ToUpper(uuid.NewString()),
+		BuildVersion: "24E263",
+		OSVersion:    "15.4",
+		ProductName:  "Mac16,10",
 		boltDB:       db,
 	}
 	if name == "" {

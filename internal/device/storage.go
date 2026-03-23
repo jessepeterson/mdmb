@@ -28,7 +28,19 @@ func (device *Device) Save() error {
 		if err != nil {
 			return err
 		}
-		return BucketPutOrDeleteString(tx, "device_mdm_profile_id", device.UDID, device.MDMProfileIdentifier)
+		err = BucketPutOrDeleteString(tx, "device_mdm_profile_id", device.UDID, device.MDMProfileIdentifier)
+		if err != nil {
+			return err
+		}
+		err = BucketPutOrDeleteString(tx, "device_build_version", device.UDID, device.BuildVersion)
+		if err != nil {
+			return err
+		}
+		err = BucketPutOrDeleteString(tx, "device_os_version", device.UDID, device.OSVersion)
+		if err != nil {
+			return err
+		}
+		return BucketPutOrDeleteString(tx, "device_product_name", device.UDID, device.ProductName)
 	})
 }
 

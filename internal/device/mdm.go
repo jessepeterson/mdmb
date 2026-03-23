@@ -20,6 +20,9 @@ func (c *MDMClient) authenticate(ctx context.Context) error {
 
 		// non-required fields
 		SerialNumber: c.Device.Serial,
+		BuildVersion: c.Device.BuildVersion,
+		OSVersion:    c.Device.OSVersion,
+		ProductName:  c.Device.ProductName,
 	}
 
 	return c.checkinRequest(ctx, ar)

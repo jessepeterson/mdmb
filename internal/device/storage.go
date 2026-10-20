@@ -55,6 +55,9 @@ func Load(udid string, db *bolt.DB) (device *Device, err error) {
 		device.ComputerName = BucketGetString(tx, "device_computer_name", udid)
 		device.MDMIdentityKeychainUUID = BucketGetString(tx, "device_mdm_identity_keychain_uuid", udid)
 		device.MDMProfileIdentifier = BucketGetString(tx, "device_mdm_profile_id", udid)
+		device.BuildVersion = BucketGetString(tx, "device_build_version", udid)
+		device.OSVersion = BucketGetString(tx, "device_os_version", udid)
+		device.ProductName = BucketGetString(tx, "device_product_name", udid)
 		return nil
 	})
 	return

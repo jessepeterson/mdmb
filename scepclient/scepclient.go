@@ -16,6 +16,8 @@ import (
 	"github.com/smallstep/scep"
 )
 
+var RequestContentType = "application/x-pki-message"
+
 // Doer executes an HTTP request.
 type Doer interface {
 	// Execute HTTP request.
@@ -109,7 +111,7 @@ func (c *Client) do(ctx context.Context, op string, message []byte) (*http.Respo
 
 	if method == http.MethodPost {
 		// some servers/proxies have problems without a content-type
-		req.Header.Set("Content-Type", "application/octet-stream")
+		req.Header.Set("Content-Type", RequestContentType)
 	}
 
 	return c.doer.Do(req)

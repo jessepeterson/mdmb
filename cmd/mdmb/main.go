@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/jessepeterson/mdmb/internal/device"
+	"github.com/jessepeterson/mdmb/scepclient"
 	bolt "go.etcd.io/bbolt"
 )
 
@@ -71,6 +72,7 @@ func main() {
 	var (
 		dbPath = f.String("db", "mdmb.db", "mdmb database file path")
 		uuids  = f.String("uuids", "", "comma-separated list of device UUIDs, '-' to read from stdin, or 'all' for all devices")
+		contentType = f.String("content-type", "application/x-pki-message", "HTTP Content-Type for SCEP POST PKIOperation requests")
 	)
 	f.Usage = func() {
 		fmt.Fprintf(f.Output(), "%s [flags] <subcommand> [flags]\n", f.Name())
@@ -124,6 +126,9 @@ func main() {
 			rctx.UUIDs = strings.Split(*uuids, ",")
 		}
 	}
+
+
+	scepclient.RequestContentType = *contentType
 
 	for _, sc := range subCmds {
 		if f.Args()[0] == sc.Name {
